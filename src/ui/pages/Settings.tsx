@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { getRepository } from '../../app/store';
+import { setTileSkin } from '../../app/skin';
 import { BUILTIN_RULESETS, getRuleset } from '../../domain/rulesets';
-import type { Settings } from '../../data/repository';
+import type { Settings, TileSkin } from '../../data/repository';
 import type { Difficulty } from '../../domain/ai/types';
 
 const DIFF_NAMES: Record<Difficulty, string> = { novice: '新手（纯效率）', intermediate: '进阶（效率+防守）', expert: '老手（加番数规划）' };
+const SKIN_NAMES: Record<TileSkin, string> = { default: '默认', majsoul: '雀魂皮肤' };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -31,6 +33,7 @@ export default function SettingsPage() {
     if (!settings) return;
     const next = { ...settings, ...patch };
     setSettings(next);
+    setTileSkin(next.tileSkin ?? 'majsoul'); // 皮肤即时生效（其余设置由各页面自行读取）
     const repo = await getRepository();
     await repo.saveSettings(next);
   };
@@ -83,6 +86,21 @@ export default function SettingsPage() {
           {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
             <option key={d} value={d}>
               {DIFF_NAMES[d]}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label className="ruleset-row">
+        牌面皮肤
+        <select
+          value={settings.tileSkin ?? 'majsoul'}
+          onChange={(e) => void update({ tileSkin: e.target.value as TileSkin })}
+          data-testid="settings-skin"
+        >
+          {(Object.keys(SKIN_NAMES) as TileSkin[]).map((s) => (
+            <option key={s} value={s}>
+              {SKIN_NAMES[s]}
             </option>
           ))}
         </select>

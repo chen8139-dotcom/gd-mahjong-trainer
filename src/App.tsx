@@ -7,6 +7,7 @@ import Play from './ui/pages/Play';
 import Learn from './ui/pages/Learn';
 import SettingsPage from './ui/pages/Settings';
 import { getRepository } from './app/store';
+import { setTileSkin } from './app/skin';
 
 interface TabDef {
   to: string;
@@ -43,6 +44,8 @@ export default function App() {
       const s = await getRepository().then((r) => r.getSettings());
       if (s === null) {
         setFirstRun(true);
+      } else {
+        setTileSkin(s.tileSkin ?? 'majsoul'); // 首屏渲染前同步皮肤，避免闪换
       }
       setSettingsLoaded(true);
     })();
