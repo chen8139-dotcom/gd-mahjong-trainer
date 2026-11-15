@@ -13,7 +13,8 @@
     "e2e": "playwright test",
     "lint": "eslint .",
     "calibrate": "tsx scripts/calibrate.ts",
-    "tournament": "tsx scripts/tournament.ts"
+    "tournament": "tsx scripts/tournament.ts",
+    "bench:decide": "tsx scripts/bench-decide.ts"
   },
   "dependencies": {
     "idb": "^8.0.0",
