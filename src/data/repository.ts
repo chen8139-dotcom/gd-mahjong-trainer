@@ -2,11 +2,16 @@
 // 领域/UI 禁止绕过此接口读写存储（设计文档·分层纪律）。
 import type { Difficulty } from '../domain/ai/types';
 
+/** 牌面皮肤：default = CSS 自绘象牙牌（初版观感），majsoul = 雀魂素材图（public/tiles/）。 */
+export type TileSkin = 'default' | 'majsoul';
+
 export interface Settings {
   rulesetId: string;
   difficulty: Difficulty;
   hintEnabled: boolean;
   gamesUntilBackupHint: number;
+  /** 牌面皮肤；旧记录无此字段 → 按 majsoul（当前版本牌面）处理 */
+  tileSkin?: TileSkin;
 }
 
 export interface GameMeta {

@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import Calculator from './ui/pages/Calculator';
 import Home from './ui/pages/Home';
@@ -5,6 +6,8 @@ import Play from './ui/pages/Play';
 import Learn from './ui/pages/Learn';
 import NewGame from './ui/pages/NewGame';
 import SettingsPage from './ui/pages/Settings';
+import { getRepository } from './app/store';
+import { setTileSkin } from './app/skin';
 
 interface TabDef {
   to: string;
@@ -33,7 +36,12 @@ function renderTab(t: TabDef) {
 
 export default function App() {
   const location = useLocation();
-  // 无首启引导：新用户直接进入首页，规则集等设置均走各页面的默认值（可在设置中修改）
+  // 皮肤初始化：设置就绪后同步（新档/旧记录缺字段 → 雀魂皮肤）；设置页切换时即时生效
+  useEffect(() => {
+    void getRepository()
+      .then((r) => r.getSettings())
+      .then((s) => setTileSkin(s?.tileSkin ?? 'majsoul'));
+  }, []);
   return (
     <div className="app">
       <main className="app-main">
