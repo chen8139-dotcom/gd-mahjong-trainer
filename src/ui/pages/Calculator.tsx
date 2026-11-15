@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { calculate } from '../../app/calc-service';
+import { loadCurrentGameState, gameToCalcPreset } from '../../app/current-game';
 import { getRepository } from '../../app/store';
 import { BUILTIN_RULESETS } from '../../domain/rulesets';
 import { tileIdToIndex, type TileId } from '../../domain/tiles';
@@ -15,6 +16,10 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
   const [seen, setSeen] = useState<TileId[]>([]);
   const [melds, setMelds] = useState<MeldRef[]>([]);
   const [mode, setMode] = useState<'hand' | 'seen' | 'meld'>('hand');
+  // 「从对局加载」的来源提示（成功/无对局/失败），下一次加载覆盖
+  const [loadNote, setLoadNote] = useState<string | null>(null);
+  // 是否存在进行中的对局：null = 查询中（按钮暂灰），false = 置灰，true = 可点
+  const [hasOngoing, setHasOngoing] = useState<boolean | null>(null);
 
   const handLimit = FULL_HAND - 3 * melds.length;
 
@@ -48,6 +53,24 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
       .catch(() => undefined);
   };
 
+  // 「从对局加载」入口：挂载时查一次是否有进行中的对局，决定按钮置灰。
+  // 单标签页内对局只在 /play 推进，本页打开期间状态不会过期；极端的多标签过期由点击兜底提示覆盖。
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      try {
+        const repo = await getRepository();
+        const ongoing = (await repo.listGames(5)).some((g) => g.outcome === 'ongoing');
+        if (alive) setHasOngoing(ongoing);
+      } catch {
+        if (alive) setHasOngoing(false);
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const pick = (tile: TileId): void => {
     if (mode === 'hand' && hand.length < handLimit) setHand([...hand, tile]);
     if (mode === 'seen') setSeen([...seen, tile]);
@@ -73,6 +96,28 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
     setHand([]);
     setSeen([]);
     setMelds([]);
+  };
+
+  // 一键从当前陪练对局加载：读最近 ongoing 局的最新快照，直接覆盖当前摆牌
+  const loadFromGame = (): void => {
+    void (async () => {
+      try {
+        const cur = await loadCurrentGameState();
+        if (!cur) {
+          setLoadNote('当前没有进行中的对局');
+          return;
+        }
+        const preset = gameToCalcPreset(cur.state);
+        setRulesetId(preset.rulesetId);
+        setHand(preset.hand);
+        setMelds(preset.melds);
+        setSeen(preset.seen);
+        setMode('hand');
+        setLoadNote(`已从当前对局加载（${preset.note}）`);
+      } catch (e) {
+        setLoadNote(`加载失败：${e instanceof Error ? e.message : String(e)}`);
+      }
+    })();
   };
 
   const handCounts = useMemo(() => {
@@ -135,10 +180,24 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
         >
           记已见牌 {seen.length}
         </button>
+        <button
+          type="button"
+          onClick={loadFromGame}
+          data-testid="calc-load-game"
+          disabled={hasOngoing === false}
+          title={hasOngoing === false ? '当前没有进行中的对局' : undefined}
+        >
+          从对局加载
+        </button>
         <button type="button" onClick={clearAll} data-testid="calc-clear">
           清空
         </button>
       </div>
+      {loadNote && (
+        <p className="muted load-note" data-testid="calc-load-note">
+          {loadNote}
+        </p>
+      )}
       {mode === 'meld' && <p className="muted">点牌面记一副碰（3 张），再点同牌升级为杠；副露每多一组，手牌少摆 3 张。</p>}
 
       <TilePicker
