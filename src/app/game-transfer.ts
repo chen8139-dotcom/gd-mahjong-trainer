@@ -37,6 +37,9 @@ const phaseLine = (s: GameState): string => {
     return `对局结束：${who} ${s.result.selfDraw ? '自摸胡' : '荣胡'} ${s.result.fan?.total ?? 0} 番（胡牌张 ${s.result.winTile ?? '?'}）`;
   }
   if (s.phase === 'claims' && s.lastDiscard) {
+    if (s.pendingBuGang) {
+      return `等待宣称：${seatLabel(s.pendingBuGang.seat, s.dealer)} 补杠 ${s.pendingBuGang.tile}，其他家可抢杠荣胡或过`;
+    }
     return `等待宣称：${seatLabel(s.lastDiscard.from, s.dealer)} 刚打出 ${s.lastDiscard.tile}，各家可碰/杠/吃/胡`;
   }
   if (s.phase === 'dealing') return '发牌中';
@@ -146,6 +149,13 @@ export function importGame(json: string): GameState {
     !PHASES.includes(st.phase)
   ) {
     throw new MahjongError('BAD_EXPORT', '对局状态字段非法（流派/庄家/回合/阶段）');
+  }
+  if (st.pendingBuGang !== undefined) {
+    const pb = st.pendingBuGang;
+    if (typeof pb !== 'object' || pb === null || !Number.isInteger(pb.seat) || pb.seat < 0 || pb.seat > 3 || typeof pb.tile !== 'string') {
+      throw new MahjongError('BAD_EXPORT', '抢杠窗状态非法');
+    }
+    if (st.phase !== 'claims') throw new MahjongError('BAD_EXPORT', '抢杠窗状态与对局阶段不符');
   }
   try {
     getRuleset(st.rulesetId);

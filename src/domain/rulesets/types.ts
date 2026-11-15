@@ -27,6 +27,10 @@ export interface Ruleset {
   name: string;
   experimental: true;
   allowsChi: boolean;
+  /** 仅自摸：对弃牌的荣胡宣称关闭（无点炮局）；缺省 false（既有流派不变） */
+  selfDrawOnly?: boolean;
+  /** 补杠可抢：buGang 进入抢杠宣称窗（他人可抢杠荣胡，唯一荣胡例外）；缺省 false（v1 即时补杠） */
+  robKong?: boolean;
   /** 起胡番数，0 = 鸡胡可胡 */
   startingFan: number;
   /** 封顶番数；null = 不封顶 */

@@ -83,8 +83,18 @@ export function legalActions(
   if (view.phase === 'claims' && view.lastDiscard) {
     const { tile, from } = view.lastDiscard;
     const t = tileIdToIndex(tile);
+    // 抢杠宣称窗：只可胡（唯一荣胡例外）或过——该牌不在弃牌池，无碰/杠/吃
+    if (view.pendingBuGang) {
+      handCounts[t]++;
+      if (canWin(handCounts, winCtx(view, ruleset, false, { qiangGang: true }))) {
+        actions.push({ type: 'win', selfDraw: false, tile });
+      }
+      handCounts[t]--;
+      return actions;
+    }
     handCounts[t]++;
-    if (canWin(handCounts, winCtx(view, ruleset, false, flags))) {
+    // selfDrawOnly 流派（自摸鸡）：对弃牌的荣胡关闭
+    if (!ruleset.selfDrawOnly && canWin(handCounts, winCtx(view, ruleset, false, flags))) {
       actions.push({ type: 'win', selfDraw: false, tile });
     }
     handCounts[t]--;

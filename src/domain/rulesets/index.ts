@@ -2,8 +2,9 @@ import type { Ruleset } from './types';
 import tuidaohu from './tuidaohu.json';
 import jipinghu from './jipinghu.json';
 import gangshi from './gangshi.json';
+import zimoji from './zimoji.json';
 
-export const BUILTIN_RULESETS: Ruleset[] = [tuidaohu, jipinghu, gangshi] as unknown as Ruleset[];
+export const BUILTIN_RULESETS: Ruleset[] = [tuidaohu, jipinghu, gangshi, zimoji] as unknown as Ruleset[];
 
 export const getRuleset = (id: string): Ruleset => {
   const r = BUILTIN_RULESETS.find((x) => x.id === id);

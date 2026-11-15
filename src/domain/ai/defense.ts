@@ -7,6 +7,7 @@
 // 已知简化（写入教学理由时须说明）：基础危险度仍按静态位置先验 + 已见张数衰减，
 // 不含筋/副露读牌（W2）。
 import type { PlayerView } from '../game-types';
+import { getRuleset } from '../rulesets';
 import { tileIdToIndex, type TileId } from '../tiles';
 
 const NUMBER_BASE: Record<number, number> = { 1: 50, 2: 55, 3: 60, 4: 70, 5: 75, 6: 70, 7: 60, 8: 55, 9: 50 };
@@ -21,6 +22,8 @@ function baseDanger(t: number, seen: number): number {
 }
 
 export function tileDanger(tile: TileId, view: PlayerView): number {
+  // 仅自摸流派（自摸鸡）：无点炮，弃牌危险度恒为 0——防守模型失效，AI 退化为纯效率出牌
+  if (getRuleset(view.rulesetId).selfDrawOnly) return 0;
   const t = tileIdToIndex(tile);
 
   // 四张全见：不可能点炮
