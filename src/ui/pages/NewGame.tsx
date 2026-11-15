@@ -67,44 +67,60 @@ export default function NewGame() {
   };
 
   return (
-    <div className="page" data-testid="new-game">
-      <h2>新对局</h2>
-      <p className="muted">选好流派与难度后开始；这些选择会记为默认设置。</p>
-      {ongoing && (
-        <p className="new-game-hint" data-testid="new-game-abandon-note">
-          ⚠️ 确认开始后将放弃当前进行中的对局（{ongoing.summary}）；点「返回」可回到恢复询问继续原局。
-        </p>
-      )}
-      <RulesetPicker selected={rulesetId} onChange={setRulesetId} prefix="new-game" />
+    <div className="page new-game-wrap" data-testid="new-game">
+      <div className="new-game-panel">
+        <div className="new-game-brand" aria-hidden="true">
+          🀄 <span>麻将陪练</span>
+        </div>
+        <h2>新对局</h2>
+        <p className="new-game-sub">选好流派与难度后开始；这些选择会记为默认设置。</p>
+        {ongoing && (
+          <p className="new-game-hint" data-testid="new-game-abandon-note">
+            ⚠️ 确认开始后将放弃当前进行中的对局（{ongoing.summary}）；点「返回」可回到恢复询问继续原局。
+          </p>
+        )}
+        <div className="new-game-options">
+          <RulesetPicker selected={rulesetId} onChange={setRulesetId} prefix="new-game" />
+        </div>
 
-      <label className="ruleset-row">
-        AI 难度
-        <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)} data-testid="new-game-difficulty">
-          {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
-            <option key={d} value={d}>
-              {DIFF_NAMES[d]}
-            </option>
-          ))}
-        </select>
-      </label>
+        <div className="new-game-options">
+          <label className="option-card">
+            <b>AI 难度</b>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+              data-testid="new-game-difficulty"
+            >
+              {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
+                <option key={d} value={d}>
+                  {DIFF_NAMES[d]}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <label className="ruleset-row">
-        <input
-          type="checkbox"
-          checked={hintEnabled}
-          onChange={(e) => setHintEnabled(e.target.checked)}
-          data-testid="new-game-hint"
-        />
-        对局中显示教练提示
-      </label>
+          <label className="option-card option-card-check">
+            <input
+              type="checkbox"
+              checked={hintEnabled}
+              onChange={(e) => setHintEnabled(e.target.checked)}
+              data-testid="new-game-hint"
+            />
+            <span>
+              <b>教练提示</b>
+              <small>对局中对比 AI 的选择，实时提醒亏牌点</small>
+            </span>
+          </label>
+        </div>
 
-      <div className="new-game-actions">
-        <button data-testid="new-game-back" onClick={() => navigate('/play')}>
-          返回
-        </button>
-        <button className="primary" data-testid="new-game-confirm" disabled={starting} onClick={() => void confirm()}>
-          开始对局
-        </button>
+        <div className="new-game-actions">
+          <button data-testid="new-game-back" onClick={() => navigate('/play')}>
+            返回
+          </button>
+          <button className="primary" data-testid="new-game-confirm" disabled={starting} onClick={() => void confirm()}>
+            {starting ? '正在开局…' : '开始对局'}
+          </button>
+        </div>
       </div>
     </div>
   );
