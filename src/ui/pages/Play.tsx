@@ -25,29 +25,36 @@ interface Session {
   state: GameState;
 }
 
-function SeatPanel({ state, seat }: { state: GameState; seat: number }) {
-  const windName = ['东', '南', '西', '北'];
+const WIND_NAMES = ['东', '南', '西', '北'];
+/** 中央弃牌池四象限：对家(2)在上、左家(3)在左、右家(1)在右、你(0)在下 */
+const POOL_AREA = { 0: 'me', 1: 'south', 2: 'west', 3: 'north' } as const;
+
+/** 对手方位面板：只展示风位/庄家/AI 标记、暗牌数与副露；弃牌集中到中央牌池 */
+function SeatPanel({ state, seat, pos }: { state: GameState; seat: number; pos: 'top' | 'left' | 'right' }) {
+  const handCount = state.hands[seat].reduce((a, b) => a + b, 0);
+  const active = state.turn === seat && !state.result;
   return (
-    <div className="seat-panel" data-testid={`seat-${seat}`}>
-      <span className={seat === state.turn ? 'seat active' : 'seat'}>
-        {windName[seat]}
-        {seat === state.dealer ? '(庄)' : ''} 家
-      </span>
-      <span className="muted">
-        副露 {state.melds[seat].length}
-      </span>
-      <div className="meld-row">
-        {state.melds[seat].map((m, i) => (
-          <span key={i} className="meld">
-            {m.tiles.map((t, j) => (
-              <TileFace key={j} tile={t} size="sm" />
-            ))}
-          </span>
-        ))}
+    <div className={`seat-panel seat-pos-${pos}${active ? ' active' : ''}`} data-testid={`seat-${seat}`}>
+      <div className="seat-head">
+        <span className={active ? 'seat active' : 'seat'}>
+          {WIND_NAMES[seat]}家{state.dealer === seat ? '（庄）' : ''}
+        </span>
+        <span className="muted">AI · 暗牌 {handCount} 张</span>
       </div>
-      <div className="discard-pool" data-testid={`discard-pool-${seat}`}>
-        {state.discards[seat].map((t, i) => (
-          <TileFace key={`${t}-${i}`} tile={t} size="sm" />
+      {state.melds[seat].length > 0 && (
+        <div className="meld-row">
+          {state.melds[seat].map((m, i) => (
+            <span key={i} className="meld">
+              {m.tiles.map((t, j) => (
+                <TileFace key={j} tile={t} size="sm" />
+              ))}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="tile-backs" aria-hidden="true">
+        {Array.from({ length: handCount }, (_, i) => (
+          <span key={i} className="tile-back" />
         ))}
       </div>
     </div>
@@ -226,171 +233,198 @@ export default function Play() {
   const gangActions = legal.filter((a) => a.type === 'anGang' || a.type === 'buGang');
 
   return (
-    <div className="page play-page" data-testid="play-page">
+    <div className="page play-page table-page" data-testid="play-page">
       {error && <p className="calc-error">{error}</p>}
-      {[1, 2, 3].map((seat) => (
-        <SeatPanel key={seat} state={session.state} seat={seat} />
-      ))}
-      <div className="seat-panel" data-testid="seat-0">
-        <span className={session.state.turn === HUMAN_SEAT ? 'seat active' : 'seat'}>
-          你{session.state.dealer === HUMAN_SEAT ? '(庄)' : ''}
-        </span>
-        <span className="muted">
-          弃牌 {session.state.discards[HUMAN_SEAT].length} · 副露 {session.state.melds[HUMAN_SEAT].length}
-        </span>
-        <div className="meld-row">
-          {session.state.melds[HUMAN_SEAT].map((m, i) => (
-            <span key={i} className="meld">
-              {m.tiles.map((t, j) => (
-                <TileFace key={j} tile={t} size="sm" />
-              ))}
+      <div className="table-grid">
+        <div className="table-wall">
+          <div className="wall-bar">
+            <span className="wall-round">东风局</span>
+            <div className="wall-progress">
+              <div className="wall-progress-fill" style={{ width: `${(session.state.wall.length / 136) * 100}%` }} />
+            </div>
+            <span className="muted">
+              余 {session.state.wall.length} 张 · 第 {session.state.discardCount} 巡
             </span>
+          </div>
+        </div>
+
+        <SeatPanel state={session.state} seat={2} pos="top" />
+        <SeatPanel state={session.state} seat={3} pos="left" />
+        <SeatPanel state={session.state} seat={1} pos="right" />
+
+        <div className="center-pool" data-testid="center-pool">
+          {([2, 3, 1, 0] as const).map((seat) => (
+            <div
+              key={seat}
+              className={`discard-pool pool-q pool-q-${POOL_AREA[seat]}`}
+              data-testid={`discard-pool-${seat}`}
+            >
+              <span className="pool-label">{seat === HUMAN_SEAT ? '你' : `${WIND_NAMES[seat]}家`}</span>
+              <div className="pool-tiles">
+                {session.state.discards[seat].map((t, i) => (
+                  <TileFace key={`${t}-${i}`} tile={t} size="sm" />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
-      </div>
-      <div className="wall-bar">
-        <span className="wall-round">东风局</span>
-        <div className="wall-progress">
-          <div className="wall-progress-fill" style={{ width: `${(session.state.wall.length / 136) * 100}%` }} />
+
+        <div className="me-area">
+          <div className="seat-panel me-info" data-testid="seat-0">
+            <span className={session.state.turn === HUMAN_SEAT && !result ? 'seat active' : 'seat'}>
+              你{session.state.dealer === HUMAN_SEAT ? '(庄)' : ''}
+            </span>
+            <span className="muted">
+              弃牌 {session.state.discards[HUMAN_SEAT].length} · 副露 {session.state.melds[HUMAN_SEAT].length}
+            </span>
+            <div className="meld-row">
+              {session.state.melds[HUMAN_SEAT].map((m, i) => (
+                <span key={i} className="meld">
+                  {m.tiles.map((t, j) => (
+                    <TileFace key={j} tile={t} size="sm" />
+                  ))}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          {hint && !result && (
+            <div className="calc-hint" data-testid="coach-hint">
+              💡 {hint}
+            </div>
+          )}
+
+          {myTurn && !result && (
+            <div className="action-bar">
+              {winAction && (
+                <button className="primary" data-testid="btn-win" onClick={() => humanAct({ type: 'win', selfDraw: true })}>
+                  自摸胡！
+                </button>
+              )}
+              {gangActions.map((a, i) =>
+                a.type === 'anGang' ? (
+                  <button key={i} data-testid={`btn-angang-${a.tile}`} onClick={() => humanAct(a)}>
+                    暗杠「{tileName(a.tile)}」
+                  </button>
+                ) : (
+                  <button key={i} data-testid={`btn-bugang-${a.tile}`} onClick={() => humanAct(a)}>
+                    补杠「{tileName(a.tile)}」
+                  </button>
+                ),
+              )}
+              <span className="muted">点手牌中的牌打出</span>
+            </div>
+          )}
+
+          {session.state.phase === 'claims' && claimLegal.length > 0 && !result && (
+            <div className="action-bar" data-testid="claim-bar">
+              {claimLegal.map((a, i) => {
+                if (a.type === 'win') return <button key={i} className="primary" data-testid="claim-win" onClick={() => humanAct(a)}>胡！</button>;
+                if (a.type === 'peng') return <button key={i} data-testid="claim-peng" onClick={() => humanAct(a)}>碰</button>;
+                if (a.type === 'mingGang') return <button key={i} data-testid="claim-gang" onClick={() => humanAct(a)}>杠</button>;
+                if (a.type === 'chi') {
+                  const sig = [...a.tiles].sort().join('');
+                  return (
+                    <button key={i} data-testid={`claim-chi-${sig}`} onClick={() => humanAct(a)}>
+                      吃 {tileNames(a.tiles)}
+                    </button>
+                  );
+                }
+                return null;
+              })}
+              <button data-testid="claim-pass" onClick={() => humanAct({ type: 'pass' })}>
+                过
+              </button>
+            </div>
+          )}
+
+          <div className="tray">
+            <span>手牌</span>
+            <div className="tray-tiles" data-testid="hand-tray">
+              {view.hand.map((t, i) => {
+                const isDrawn =
+                  myTurn && !!session.state.drawnTile && t === session.state.drawnTile && i === view.hand.length - 1;
+                return (
+                  <TileFace
+                    key={`${t}-${i}`}
+                    tile={t}
+                    highlight={isDrawn}
+                    testId={`hand-${t}`}
+                    onClick={myTurn ? () => humanAct({ type: 'discard', tile: t }) : undefined}
+                  />
+                );
+              })}
+            </div>
+          </div>
+          {autoMode && !result && <p className="muted auto-note">自动演示模式：AI 代打所有座位</p>}
         </div>
-        <span className="muted">
-          余 {session.state.wall.length} 张 · 第 {session.state.discardCount} 巡
-        </span>
       </div>
 
       {result && (
-        <div className="calc-result result-panel" data-testid="result-panel">
-          {result.type === 'draw' ? (
-            <h3 className="result-title">流局 · 荒庄</h3>
-          ) : (
-            <>
-              <h3 className="result-title win">
-                {result.selfDraw ? '自摸胡' : '荣胡'} ·{' '}
-                {result.winner === HUMAN_SEAT ? '你' : `${['东', '南', '西', '北'][result.winner ?? 0]}家`}
-                {' '}· {result.fan?.total ?? 0} 番
-              </h3>
-              {result.fan && (
-                <div className="fan-chips">
-                  {result.fan.matched.map((m) => (
-                    <span key={m.yakuId} className="fan-chip">
-                      {m.name} {m.fan}番
-                    </span>
-                  ))}
-                  <span className="fan-chip total">合计 {result.fan.total} 番</span>
-                </div>
-              )}
-              <p className="muted">
-                胡牌张：「{tileName(result.winTile ?? '')}」· {result.selfDraw ? '自摸' : '对手点炮'}
-              </p>
-            </>
-          )}
-          <table className="score-table" data-testid="score-deltas">
-            <thead>
-              <tr>
-                <th>玩家</th>
-                <th>得分变动</th>
-              </tr>
-            </thead>
-            <tbody>
-              {result.deltas.map((d, i) => (
-                <tr key={i} className={i === HUMAN_SEAT ? 'self-row' : ''}>
-                  <td>
-                    {i === HUMAN_SEAT ? '你' : `${['东', '南', '西', '北'][i]}家`}
-                    {i === session.state.dealer ? ' (庄)' : ''}
-                  </td>
-                  <td className={d > 0 ? 'pos' : d < 0 ? 'neg' : ''}>
-                    {d > 0 ? '+' : ''}
-                    {d}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <div data-testid="divergence-list" className="divergence-list">
-            <b>关键分歧点（{divergences.length}）</b>
-            {divergences.length === 0 && <p className="muted">本局没有明显偏离 AI 建议的出牌。</p>}
-            {divergences.map((d, i) => (
-              <div key={i} className="divergence-item">
-                第 {d.step} 步：你打「{tileName(d.playerTile)}」（进张剩 {d.playerUkeire} 张）
-                ，AI 会打「{tileName(d.aiTile)}」（进张 {d.aiUkeire} 张）
-              </div>
-            ))}
-          </div>
-          <button className="primary" data-testid="new-game" onClick={() => window.location.assign('/play')}>
-            再来一局
-          </button>
-        </div>
-      )}
-
-      {hint && !result && (
-        <div className="calc-hint" data-testid="coach-hint">
-          💡 {hint}
-        </div>
-      )}
-
-      {myTurn && !result && (
-        <div className="action-bar">
-          {winAction && (
-            <button className="primary" data-testid="btn-win" onClick={() => humanAct({ type: 'win', selfDraw: true })}>
-              自摸胡！
-            </button>
-          )}
-          {gangActions.map((a, i) =>
-            a.type === 'anGang' ? (
-              <button key={i} data-testid={`btn-angang-${a.tile}`} onClick={() => humanAct(a)}>
-                暗杠「{tileName(a.tile)}」
-              </button>
+        <div className="result-overlay">
+          <div className="calc-result result-panel" data-testid="result-panel">
+            {result.type === 'draw' ? (
+              <h3 className="result-title">流局 · 荒庄</h3>
             ) : (
-              <button key={i} data-testid={`btn-bugang-${a.tile}`} onClick={() => humanAct(a)}>
-                补杠「{tileName(a.tile)}」
-              </button>
-            ),
-          )}
-          <span className="muted">点手牌中的牌打出</span>
+              <>
+                <h3 className="result-title win">
+                  {result.selfDraw ? '自摸胡' : '荣胡'} ·{' '}
+                  {result.winner === HUMAN_SEAT ? '你' : `${WIND_NAMES[result.winner ?? 0]}家`}
+                  {' '}· {result.fan?.total ?? 0} 番
+                </h3>
+                {result.fan && (
+                  <div className="fan-chips">
+                    {result.fan.matched.map((m) => (
+                      <span key={m.yakuId} className="fan-chip">
+                        {m.name} {m.fan}番
+                      </span>
+                    ))}
+                    <span className="fan-chip total">合计 {result.fan.total} 番</span>
+                  </div>
+                )}
+                <p className="muted">
+                  胡牌张：「{tileName(result.winTile ?? '')}」· {result.selfDraw ? '自摸' : '对手点炮'}
+                </p>
+              </>
+            )}
+            <table className="score-table" data-testid="score-deltas">
+              <thead>
+                <tr>
+                  <th>玩家</th>
+                  <th>得分变动</th>
+                </tr>
+              </thead>
+              <tbody>
+                {result.deltas.map((d, i) => (
+                  <tr key={i} className={i === HUMAN_SEAT ? 'self-row' : ''}>
+                    <td>
+                      {i === HUMAN_SEAT ? '你' : `${WIND_NAMES[i]}家`}
+                      {i === session.state.dealer ? ' (庄)' : ''}
+                    </td>
+                    <td className={d > 0 ? 'pos' : d < 0 ? 'neg' : ''}>
+                      {d > 0 ? '+' : ''}
+                      {d}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <div data-testid="divergence-list" className="divergence-list">
+              <b>关键分歧点（{divergences.length}）</b>
+              {divergences.length === 0 && <p className="muted">本局没有明显偏离 AI 建议的出牌。</p>}
+              {divergences.map((d, i) => (
+                <div key={i} className="divergence-item">
+                  第 {d.step} 步：你打「{tileName(d.playerTile)}」（进张剩 {d.playerUkeire} 张）
+                  ，AI 会打「{tileName(d.aiTile)}」（进张 {d.aiUkeire} 张）
+                </div>
+              ))}
+            </div>
+            <button className="primary" data-testid="new-game" onClick={() => window.location.assign('/play')}>
+              再来一局
+            </button>
+          </div>
         </div>
       )}
-
-      {session.state.phase === 'claims' && claimLegal.length > 0 && !result && (
-        <div className="action-bar" data-testid="claim-bar">
-          {claimLegal.map((a, i) => {
-            if (a.type === 'win') return <button key={i} className="primary" data-testid="claim-win" onClick={() => humanAct(a)}>胡！</button>;
-            if (a.type === 'peng') return <button key={i} data-testid="claim-peng" onClick={() => humanAct(a)}>碰</button>;
-            if (a.type === 'mingGang') return <button key={i} data-testid="claim-gang" onClick={() => humanAct(a)}>杠</button>;
-            if (a.type === 'chi') {
-              const sig = [...a.tiles].sort().join('');
-              return (
-                <button key={i} data-testid={`claim-chi-${sig}`} onClick={() => humanAct(a)}>
-                  吃 {tileNames(a.tiles)}
-                </button>
-              );
-            }
-            return null;
-          })}
-          <button data-testid="claim-pass" onClick={() => humanAct({ type: 'pass' })}>
-            过
-          </button>
-        </div>
-      )}
-
-      <div className="tray">
-        <span>手牌</span>
-        <div className="tray-tiles" data-testid="hand-tray">
-          {view.hand.map((t, i) => {
-            const isDrawn =
-              myTurn && !!session.state.drawnTile && t === session.state.drawnTile && i === view.hand.length - 1;
-            return (
-              <TileFace
-                key={`${t}-${i}`}
-                tile={t}
-                highlight={isDrawn}
-                testId={`hand-${t}`}
-                onClick={myTurn ? () => humanAct({ type: 'discard', tile: t }) : undefined}
-              />
-            );
-          })}
-        </div>
-      </div>
-      {autoMode && !result && <p className="muted">自动演示模式：AI 代打所有座位</p>}
     </div>
   );
 }
