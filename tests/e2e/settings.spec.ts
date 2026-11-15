@@ -2,14 +2,21 @@ import { test, expect } from '@playwright/test';
 import { completeFirstRun, expectAppReady } from './helpers';
 import fs from 'node:fs';
 
-test('设置页换流派与难度；导出→清→导入一致（SC-9）', async ({ page }) => {
+test('新对局页写回流派；设置页导出→清→导入一致（SC-9）', async ({ page }) => {
   await completeFirstRun(page);
 
-  // 设置页换流派与难度
+  // 流派/难度在新对局配置页选择（写回全局设置作为下次默认）；设置页不再提供该入口
+  await page.goto('/play/new');
+  await page.getByTestId('new-game-radio-gangshi').check();
+  await page.getByTestId('new-game-confirm').click();
+  await expect(page.getByTestId('play-page')).toBeVisible({ timeout: 15_000 });
+
+  // 设置页番种表随上次所选流派展示（港式新章：起胡 3 番）
   await page.goto('/settings');
-  await page.getByTestId('settings-ruleset').selectOption('gangshi');
-  await page.getByTestId('settings-difficulty').selectOption('expert');
-  await expect(page.getByTestId('fan-table')).toBeVisible();
+  const fanTable = page.getByTestId('fan-table');
+  await expect(fanTable).toBeVisible();
+  await fanTable.locator('summary').click();
+  await expect(fanTable).toContainText('起胡 3 番');
 
   // 导出
   const downloadPromise = page.waitForEvent('download');
@@ -18,7 +25,7 @@ test('设置页换流派与难度；导出→清→导入一致（SC-9）', asyn
   const backup = await download.path().then((p) => fs.readFileSync(p!, 'utf-8'));
   expect(JSON.parse(backup).v).toBe(1);
 
-  // 清空存储（模拟清缓存）→ 应用仍直接进入首页（首启引导已移除，无设置走各页默认值）
+  // 清空存储（模拟清缓存）→ 应用仍直接进入首页（无设置走各页默认值）
   await page.evaluate(() => indexedDB.deleteDatabase('gd-mahjong-trainer'));
   await page.reload();
   await expectAppReady(page);
@@ -35,7 +42,8 @@ test('设置页换流派与难度；导出→清→导入一致（SC-9）', asyn
   await page.waitForURL(/\/settings/);
   await page.reload();
   await expectAppReady(page);
-  await page.goto('/settings');
-  await expect(page.getByTestId('settings-ruleset')).toHaveValue('gangshi');
-  await expect(page.getByTestId('settings-difficulty')).toHaveValue('expert');
+
+  // 持久化断言：写回的流派经新对局页预选态验证（设置页已无流派选择器）
+  await page.goto('/play/new');
+  await expect(page.getByTestId('new-game-radio-gangshi')).toBeChecked();
 });

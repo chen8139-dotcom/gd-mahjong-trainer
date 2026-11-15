@@ -1,6 +1,6 @@
 import { BUILTIN_RULESETS } from '../../domain/rulesets';
 
-/** 流派选择器：radio-card 多选一 + 番种表预览（首启引导与新对局配置页共用）。
+/** 流派选择器：radio-card 多选一 + 番种表预览（新对局配置页使用）。
  *  prefix 决定 radio 的 testid（`${prefix}-radio-${id}`），调用方各自保留既有测试锚点。 */
 export default function RulesetPicker({
   selected,

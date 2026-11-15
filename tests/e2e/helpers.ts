@@ -8,8 +8,9 @@ export async function expectAppReady(page: Page): Promise<void> {
 
 /**
  * 进入应用首页并等待就绪。历史上这里负责完成首启引导；引导页已移除
- * （新用户直接进入首页，规则集等设置走各页面默认值，可在设置页修改），
- * 仅保留函数名以减少调用方改动。需指定规则集的用例请走 /settings 页面。
+ * （新用户直接进入首页，规则集等设置走各页面默认值，可在新对局页 /play/new 修改），
+ * 仅保留函数名以减少调用方改动。需指定规则集的用例请在 /play/new 选定后确认开局
+ * （选择写回全局设置）。
  */
 export async function completeFirstRun(page: Page): Promise<void> {
   await page.goto('/');

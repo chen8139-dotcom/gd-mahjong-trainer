@@ -22,9 +22,8 @@
   </tr>
   <tr>
     <td colspan="3" align="center">
-      <img src="docs/screenshots/home.png" alt="首页导航" width="32%"/>&nbsp;
-      <img src="docs/screenshots/first-run.png" alt="首启流派引导" width="32%"/>
-      <br><sub>首页导航 · 首启三选一流派引导（推倒胡 / 鸡平胡 / 港式新章）</sub>
+      <img src="docs/screenshots/home.png" alt="首页导航" width="32%"/>
+      <br><sub>首页导航</sub>
     </td>
   </tr>
 </table>

@@ -1,11 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { getRepository } from '../../app/store';
 import { setTileSkin } from '../../app/skin';
-import { BUILTIN_RULESETS, getRuleset } from '../../domain/rulesets';
-import type { Settings, TileSkin } from '../../data/repository';
-import type { Difficulty } from '../../domain/ai/types';
+import { getRuleset } from '../../domain/rulesets';
+import { DEFAULT_SETTINGS, type Settings, type TileSkin } from '../../data/repository';
 
-export const DIFF_NAMES: Record<Difficulty, string> = { novice: '新手（纯效率）', intermediate: '进阶（效率+防守）', expert: '老手（加番数规划）' };
 const SKIN_NAMES: Record<TileSkin, string> = { default: '默认', majsoul: '雀魂皮肤' };
 
 export default function SettingsPage() {
@@ -17,14 +15,7 @@ export default function SettingsPage() {
   useEffect(() => {
     void (async () => {
       const repo = await getRepository();
-      setSettings(
-        (await repo.getSettings()) ?? {
-          rulesetId: 'tuidaohu',
-          difficulty: 'intermediate',
-          hintEnabled: true,
-          gamesUntilBackupHint: 20,
-        },
-      );
+      setSettings((await repo.getSettings()) ?? DEFAULT_SETTINGS);
       setGameCount((await repo.listGames()).length);
     })();
   }, []);
@@ -70,28 +61,6 @@ export default function SettingsPage() {
       <h2>设置</h2>
 
       <label className="ruleset-row">
-        流派
-        <select value={settings.rulesetId} onChange={(e) => void update({ rulesetId: e.target.value })} data-testid="settings-ruleset">
-          {BUILTIN_RULESETS.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="ruleset-row">
-        AI 难度
-        <select value={settings.difficulty} onChange={(e) => void update({ difficulty: e.target.value as Difficulty })} data-testid="settings-difficulty">
-          {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
-            <option key={d} value={d}>
-              {DIFF_NAMES[d]}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <label className="ruleset-row">
         牌面皮肤
         <select
           value={settings.tileSkin ?? 'majsoul'}
@@ -117,7 +86,7 @@ export default function SettingsPage() {
       </label>
 
       <details className="fan-preview" data-testid="fan-table">
-        <summary>当前流派番种表（全文）</summary>
+        <summary>上次所选流派番种表（全文）</summary>
         <table>
           <tbody>
             {ruleset.yaku.map((y) => (

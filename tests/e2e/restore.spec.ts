@@ -48,9 +48,10 @@ test('开新局 → 新对局配置页选流派开局；旧局废弃不再出现
   await page.getByTestId('new-game-confirm').click();
   await expect(page.getByTestId('play-page')).toBeVisible({ timeout: 15_000 });
 
-  // 选择写回全局设置
-  await page.goto('/settings');
-  await expect(page.getByTestId('settings-ruleset')).toHaveValue('zimoji');
+  // 选择写回全局设置（设置页已无流派/难度入口，经新对局页预选态断言）
+  await page.goto('/play/new');
+  await expect(page.getByTestId('new-game-radio-zimoji')).toBeChecked();
+  await expect(page.getByTestId('new-game-difficulty')).toHaveValue('expert');
 
   // 再次进入 /play：弹出的恢复询问是新开的这局（自摸鸡·第 0 巡·庄家摸牌后余 83 张），
   // 旧局（推倒胡·已出过牌）已被标记废弃，不再出现

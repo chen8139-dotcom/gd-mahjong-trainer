@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getRepository } from '../../app/store';
 import { deserializeSnapshot } from '../../app/game-controller';
-import type { Settings } from '../../data/repository';
+import { DEFAULT_SETTINGS, type Settings } from '../../data/repository';
 import type { Difficulty } from '../../domain/ai/types';
 import { getRuleset } from '../../domain/rulesets';
 import RulesetPicker from '../components/RulesetPicker';
-import { DIFF_NAMES } from './Settings';
+
+export const DIFF_NAMES: Record<Difficulty, string> = { novice: '新手（纯效率）', intermediate: '进阶（效率+防守）', expert: '老手（加番数规划）' };
 
 /** 新对局配置页（恢复询问页「开新局」跳转至此）：选流派 / AI 难度 / 教练提示。
  *  旧对局在此页保持 ongoing（可「返回」/浏览器后退回到恢复询问，反悔有路），
@@ -15,12 +16,7 @@ import { DIFF_NAMES } from './Settings';
 export default function NewGame() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
-  const [base, setBase] = useState<Settings>({
-    rulesetId: 'tuidaohu',
-    difficulty: 'intermediate',
-    hintEnabled: true,
-    gamesUntilBackupHint: 20,
-  });
+  const [base, setBase] = useState<Settings>(DEFAULT_SETTINGS);
   const [rulesetId, setRulesetId] = useState(base.rulesetId);
   const [difficulty, setDifficulty] = useState<Difficulty>(base.difficulty);
   const [hintEnabled, setHintEnabled] = useState(base.hintEnabled);

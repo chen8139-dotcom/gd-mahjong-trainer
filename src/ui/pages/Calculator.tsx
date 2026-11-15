@@ -4,6 +4,7 @@ import { analyzeHand, type HandAnalysis } from '../../app/calc-analysis';
 import { loadCurrentGameState, gameToCalcPreset } from '../../app/current-game';
 import { DEFAULT_HORIZON_WALL, type SimTally } from '../../app/winrate';
 import { getRepository } from '../../app/store';
+import { DEFAULT_SETTINGS } from '../../data/repository';
 import { BUILTIN_RULESETS } from '../../domain/rulesets';
 import { tileIdToIndex, type TileId } from '../../domain/tiles';
 import type { MeldRef } from '../../domain/agari';
@@ -58,12 +59,8 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
     getRepository()
       .then(async (repo) => {
         const s = await repo.getSettings();
-        await repo.saveSettings({
-          rulesetId: id,
-          difficulty: s?.difficulty ?? 'novice',
-          hintEnabled: s?.hintEnabled ?? true,
-          gamesUntilBackupHint: s?.gamesUntilBackupHint ?? 20,
-        });
+        // 展开保留全部既有字段（含 tileSkin）：此前重建对象会悄悄重置皮肤
+        await repo.saveSettings({ ...(s ?? DEFAULT_SETTINGS), rulesetId: id });
       })
       .catch(() => undefined);
   };
