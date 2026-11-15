@@ -13,6 +13,7 @@ import { tileName, tileNames, toCounts, tileIdToIndex } from '../../domain/tiles
 import { evaluateWin } from '../../domain/score';
 import { evaluateTurn, type Divergence } from '../../app/coach';
 import { getRepository } from '../../app/store';
+import { exportGame, importGame, summarizeState } from '../../app/game-transfer';
 import { getRuleset } from '../../domain/rulesets';
 import { decide } from '../../domain/ai/decider';
 import type { Difficulty } from '../../domain/ai/types';
@@ -69,6 +70,13 @@ export default function Play() {
   const [hint, setHint] = useState<string | null>(null);
   const [divergences, setDivergences] = useState<Divergence[]>([]);
   const [resumeCandidate, setResumeCandidate] = useState<string | null>(null);
+  // 对局导出/导入：仅在玩家出牌回合提供入口（wall-tools）；弹层打开时对局冻结（AI 暂停），保证导出的一刻与界面一致
+  const [dialog, setDialog] = useState<'export' | 'import' | null>(null);
+  const [exportNote, setExportNote] = useState('');
+  const [exportMsg, setExportMsg] = useState<string | null>(null);
+  const [importText, setImportText] = useState('');
+  const [importError, setImportError] = useState<string | null>(null);
+  const importFileRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (!hint) return;
     const timer = setTimeout(() => setHint(null), 8000);
@@ -154,9 +162,9 @@ export default function Play() {
       .catch(() => undefined);
   }, [session]);
 
-  // AI 驱动：非人类回合或宣称窗口自动处理
+  // AI 驱动：非人类回合或宣称窗口自动处理；导出/导入弹层打开时冻结对局
   useEffect(() => {
-    if (!session || session.state.result || resumeCandidate) return;
+    if (!session || session.state.result || resumeCandidate || dialog) return;
     const st = session.state;
     if (st.phase === 'dealing') return;
     if (st.phase === 'over') {
@@ -197,7 +205,7 @@ export default function Play() {
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [session, settings, resumeCandidate, persistFinish, step, autoMode]);
+  }, [session, settings, resumeCandidate, persistFinish, step, autoMode, dialog]);
 
   // 人类出牌（含教练评估）
   const humanAct = (action: GameAction): void => {
@@ -218,6 +226,12 @@ export default function Play() {
   const view = useMemo(() => (session ? playerView(session.state, HUMAN_SEAT) : null), [session]);
   const myTurn = session?.state.phase === 'action' && session.state.turn === HUMAN_SEAT;
   const legal = useMemo(() => (view && myTurn ? legalActions(view, getRuleset(view.rulesetId)) : []), [view, myTurn]);
+  // 摸牌分离展示：刚摸的牌不并入手牌排序，单独显示在最右（打出后 reducer 清空 drawnTile，手牌自动恢复排序）
+  const drawnTile = myTurn && view ? view.drawnTile ?? null : null;
+  const handTiles =
+    drawnTile && view
+      ? view.hand.filter((_t, i) => i !== view.hand.lastIndexOf(drawnTile))
+      : view?.hand ?? [];
   const claimLegal = useMemo(
     () => (view && session?.state.phase === 'claims' && session.state.lastDiscard && session.state.lastDiscard.from !== HUMAN_SEAT ? legalActions(view, getRuleset(view.rulesetId)) : []),
     [view, session],
@@ -247,6 +261,86 @@ export default function Play() {
     }
     return null;
   }, [view, session, myTurn]);
+
+  // —— 对局导出/导入（快照含备注随写随更新；弹层打开期间对局冻结，state 不变） ——
+  const exportJson = useMemo(
+    () => (session ? exportGame(session.state, { originGameId: session.gameId, note: exportNote }) : ''),
+    [session, exportNote],
+  );
+
+  const openExport = (): void => {
+    setExportNote('');
+    setExportMsg(null);
+    setDialog('export');
+  };
+  const openImport = (): void => {
+    setImportText('');
+    setImportError(null);
+    setDialog('import');
+  };
+
+  const downloadExport = (): void => {
+    const blob = new Blob([exportJson], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const d = new Date();
+    const pad = (n: number): string => String(n).padStart(2, '0');
+    a.download = `mahjong-game-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    setExportMsg('已导出对局文件');
+  };
+
+  const copyExport = async (): Promise<void> => {
+    try {
+      await navigator.clipboard.writeText(exportJson);
+      setExportMsg('已复制到剪贴板');
+    } catch {
+      // 剪贴板不可用（如非安全上下文）时退化为选中文本手动复制
+      const ta = document.querySelector<HTMLTextAreaElement>('[data-testid="export-json"]');
+      if (ta) ta.select();
+      if (ta && document.execCommand('copy')) setExportMsg('已复制到剪贴板');
+      else setExportMsg('复制失败，请手动全选文本复制');
+    }
+  };
+
+  const onImportFile = async (file: File): Promise<void> => {
+    try {
+      setImportText(await file.text());
+      setImportError(null);
+    } catch (e) {
+      setImportError(`读取文件失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
+  const confirmImport = async (): Promise<void> => {
+    const raw = importText.trim();
+    if (!raw) {
+      setImportError('请先选择文件或粘贴导出的 JSON 文本');
+      return;
+    }
+    let state: ReturnType<typeof importGame>;
+    try {
+      state = importGame(raw);
+    } catch (e) {
+      setImportError(e instanceof Error ? e.message : String(e));
+      return;
+    }
+    try {
+      const repo = await getRepository();
+      // 生成新 gameId 落库：不污染原局历史，且崩溃恢复（resume-dialog）对导入局同样生效
+      const gameId = crypto.randomUUID();
+      await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
+      await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
+      setHint(null);
+      setDivergences([]);
+      setDialog(null);
+      setSession({ gameId, state });
+    } catch (e) {
+      setImportError(`导入落地失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
 
   if (resumeCandidate) {
     return (
@@ -281,6 +375,16 @@ export default function Play() {
             <span className="muted">
               余 {session.state.wall.length} 张 · 第 {session.state.discardCount} 巡
             </span>
+            {myTurn && !autoMode && (
+              <span className="wall-tools">
+                <button data-testid="export-game-btn" onClick={openExport}>
+                  导出
+                </button>
+                <button data-testid="import-game-btn" onClick={openImport}>
+                  导入
+                </button>
+              </span>
+            )}
           </div>
         </div>
 
@@ -385,19 +489,23 @@ export default function Play() {
           <div className="tray">
             <span>手牌</span>
             <div className="tray-tiles" data-testid="hand-tray">
-              {view.hand.map((t, i) => {
-                const isDrawn =
-                  myTurn && !!session.state.drawnTile && t === session.state.drawnTile && i === view.hand.length - 1;
-                return (
-                  <TileFace
-                    key={`${t}-${i}`}
-                    tile={t}
-                    highlight={isDrawn}
-                    testId={`hand-${t}`}
-                    onClick={myTurn ? () => humanAct({ type: 'discard', tile: t }) : undefined}
-                  />
-                );
-              })}
+              {handTiles.map((t, i) => (
+                <TileFace
+                  key={`${t}-${i}`}
+                  tile={t}
+                  testId={`hand-${t}`}
+                  onClick={myTurn ? () => humanAct({ type: 'discard', tile: t }) : undefined}
+                />
+              ))}
+              {drawnTile && (
+                <TileFace
+                  key={`drawn-${drawnTile}`}
+                  tile={drawnTile}
+                  highlight
+                  testId={`hand-${drawnTile}`}
+                  onClick={myTurn ? () => humanAct({ type: 'discard', tile: drawnTile }) : undefined}
+                />
+              )}
             </div>
           </div>
           {autoMode && !result && <p className="muted auto-note">自动演示模式：AI 代打所有座位</p>}
@@ -466,6 +574,87 @@ export default function Play() {
             <button className="primary" data-testid="new-game" onClick={() => window.location.assign('/play')}>
               再来一局
             </button>
+          </div>
+        </div>
+      )}
+
+      {dialog === 'export' && session && (
+        <div className="result-overlay">
+          <div className="calc-result result-panel" data-testid="export-dialog">
+            <h3 className="result-title">导出对局快照</h3>
+            <pre className="transfer-summary" data-testid="export-summary">{summarizeState(session.state)}</pre>
+            <label className="transfer-note-row">
+              备注（bug 描述，随文件携带）
+              <input
+                value={exportNote}
+                onChange={(e) => setExportNote(e.target.value)}
+                data-testid="export-note"
+                placeholder="例：这里 AI 该碰没碰"
+              />
+            </label>
+            <textarea className="transfer-json" readOnly value={exportJson} data-testid="export-json" />
+            <div className="transfer-actions">
+              <button className="primary" data-testid="export-download" onClick={downloadExport}>
+                下载文件
+              </button>
+              <button data-testid="export-copy" onClick={() => void copyExport()}>
+                复制文本
+              </button>
+              <button data-testid="dialog-close" onClick={() => setDialog(null)}>
+                关闭
+              </button>
+            </div>
+            {exportMsg && (
+              <p className="muted" data-testid="export-msg">
+                {exportMsg}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {dialog === 'import' && (
+        <div className="result-overlay">
+          <div className="calc-result result-panel" data-testid="import-dialog">
+            <h3 className="result-title">导入对局快照</h3>
+            <p className="muted">选择导出的 .json 文件，或把导出 JSON 文本粘贴到下方；导入后将从该局面继续对局。</p>
+            <div className="transfer-actions">
+              <button data-testid="import-file-btn" onClick={() => importFileRef.current?.click()}>
+                选择文件…
+              </button>
+              <input
+                ref={importFileRef}
+                type="file"
+                accept="application/json"
+                style={{ display: 'none' }}
+                data-testid="import-file"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void onImportFile(f);
+                  e.target.value = ''; // 允许重复选择同一文件
+                }}
+              />
+            </div>
+            <textarea
+              className="transfer-json"
+              placeholder="也可在此粘贴导出的 JSON 文本"
+              value={importText}
+              onChange={(e) => setImportText(e.target.value)}
+              data-testid="import-text"
+            />
+            {importError && (
+              <p className="calc-error" data-testid="import-error">
+                {importError}
+              </p>
+            )}
+            <div className="transfer-actions">
+              <button className="primary" data-testid="import-confirm" onClick={() => void confirmImport()}>
+                确认导入
+              </button>
+              <button data-testid="dialog-close" onClick={() => setDialog(null)}>
+                关闭
+              </button>
+            </div>
           </div>
         </div>
       )}

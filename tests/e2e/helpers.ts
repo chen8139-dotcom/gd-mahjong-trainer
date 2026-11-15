@@ -7,27 +7,25 @@ export async function expectAppReady(page: Page): Promise<void> {
   await expect(page.getByTestId('first-run')).toHaveCount(0);
 }
 
-/** 关闭首启引导（若出现）。返回是否出现过。 */
-async function dismissFirstRun(page: Page, radioTestId?: string): Promise<boolean> {
-  const firstRun = page.getByTestId('first-run');
-  if (!(await firstRun.isVisible().catch(() => false))) return false;
-  if (radioTestId) await page.getByTestId(radioTestId).check();
-  await page.getByTestId('first-run-confirm').click();
-  await expect(firstRun).toHaveCount(0);
-  return true;
-}
-
 /**
  * 每个测试都是全新浏览器上下文（无 IndexedDB），先完成首启引导。
- * 极少数情况下新上下文的 IDB 首写不落盘，刷新后引导会再出现——循环确认（最多 3 次）。
+ * 注意 App 异步判定设置，goto 后需等「引导或导航二者其一出现」再行动（不能立刻 isVisible）。
+ * 极少数情况下新上下文的 IDB 首写不落盘，刷新后引导会再出现——回到循环继续确认（最多 3 次）。
  */
 export async function completeFirstRun(page: Page, radioTestId?: string): Promise<void> {
+  const dialog = page.getByTestId('first-run');
+  const nav = page.locator('.bottom-nav');
   await page.goto('/');
   for (let i = 0; i < 3; i++) {
-    const dismissed = await dismissFirstRun(page, i === 0 ? radioTestId : undefined);
-    if (!dismissed) break;
-    await page.reload();
-    await expectAppReady(page);
+    await expect(dialog.or(nav)).toBeVisible({ timeout: 30_000 });
+    if (!(await dialog.isVisible())) break; // 无引导：应用就绪
+    if (i === 0 && radioTestId) await page.getByTestId(radioTestId).check();
+    await page.getByTestId('first-run-confirm').click();
+    await expect(dialog).toHaveCount(0);
+    await page.reload(); // 验证 IDB 已落盘
+    await expect(dialog.or(nav)).toBeVisible({ timeout: 30_000 });
+    if (await nav.isVisible()) return;
+    // 引导重现 = 首写丢失，回到循环继续确认
   }
   await expectAppReady(page);
 }

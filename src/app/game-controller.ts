@@ -74,9 +74,15 @@ export function newGame(cfg: GameConfig): GameState {
   const wall = buildWall(rng).map((t) => t.tileIndex);
   const hands = [0, 1, 2, 3].map(() => new Array<number>(34).fill(0));
   const dealer = cfg.dealer ?? 0;
+  // 庄家第 14 张即开局摸牌，记录为 drawnTile（摸牌分离展示依赖）；发牌次序不变，种子契约不受影响
+  let dealerDrawn: number | null = null;
   for (let seat = 0; seat < 4; seat++) {
     const n = seat === dealer ? 14 : 13;
-    for (let i = 0; i < n; i++) hands[seat][wall.pop()!]++;
+    for (let i = 0; i < n; i++) {
+      const t = wall.pop()!;
+      hands[seat][t]++;
+      if (seat === dealer && i === n - 1) dealerDrawn = t;
+    }
   }
   return {
     v: 1,
@@ -89,7 +95,7 @@ export function newGame(cfg: GameConfig): GameState {
     melds: [[], [], [], []],
     discards: [[], [], [], []],
     wall,
-    drawnTile: null,
+    drawnTile: dealerDrawn === null ? null : indexToTileId(dealerDrawn),
     lastDiscard: null,
     flags: {},
     result: null,
