@@ -3,12 +3,12 @@
 // 全部输出结构化 DecisionReason，渲染成人话是教学核心（[internal]，结构可迭代）。
 import { evalDiscards, scoreOf, type DiscardEval } from './efficiency';
 import { tileDanger } from './defense';
-import type { Decision, DecisionReason, Difficulty } from './types';
+import type { AiTier, Decision, DecisionReason, Difficulty } from './types';
 import type { PlayerView } from '../game-types';
 import type { Ruleset } from '../rulesets/types';
-import { legalActions, shantenOf, canWin } from '../engine';
+import { legalActions, shantenOf, canWin, listWaits } from '../engine';
 import type { WinContext } from '../yaku';
-import { tileIdToIndex, tileName, toCounts, type TileId } from '../tiles';
+import { indexToTileId, tileIdToIndex, tileName, toCounts, type TileId } from '../tiles';
 
 const DANGER_WEIGHT: Record<Difficulty, number> = { novice: 0, intermediate: 0.8, expert: 0.8 };
 const FAN_WEIGHT: Record<Difficulty, number> = { novice: 0, intermediate: 0, expert: 4 };
@@ -45,6 +45,57 @@ function confidenceOf(margin: number): number {
   return Math.min(1, margin / 30);
 }
 
+/**
+ * W0 暗杠/补杠：v1 只考虑胡/打，legalActions 给出的 anGang/buGang 从未执行。
+ * 规则：有牌可摸（wallCount ≥ 1，否则杠后立即流局）且开杠后向听保持/改善才执行；
+ * 听牌时额外要求杠后等待仍有剩余张（listWaits 会跳过已见满 4 张的牌）。
+ * 杠不改变已见牌计数（牌从手中进副露，均已在 seenCounts 内）。
+ */
+function gangDecisionOf(view: PlayerView, ruleset: Ruleset, bestShantenAfter: number, bestScore: number): Decision | null {
+  if (view.wallCount === 0) return null;
+  const hand = toCounts(view.hand);
+  const melds = view.melds[view.seat];
+
+  const tryKong = (t: number, anGang: boolean): Decision | null => {
+    const remove = anGang ? 4 : 1;
+    const meldedAfter = melds.length + (anGang ? 1 : 0); // 补杠升级已有碰，副露数不变
+    hand[t] -= remove;
+    const shantenAfter = shantenOf(hand, meldedAfter, ruleset);
+    const dead =
+      shantenAfter === 0 && listWaits(hand, meldedAfter, view.seenCounts, ruleset).length === 0;
+    hand[t] += remove;
+    if (shantenAfter > bestShantenAfter || dead) return null;
+    const tile = indexToTileId(t);
+    const label = anGang ? '暗杠' : '补杠';
+    return {
+      action: anGang ? { type: 'anGang', tile } : { type: 'buGang', tile },
+      score: bestScore + 1,
+      confidence: 0.9,
+      reasons: [
+        {
+          kind: 'claim',
+          text: `${label}「${tileName(tile)}」${shantenAfter < bestShantenAfter ? '向听改善' : '保持向听'}，且可多摸一张牌`,
+          data: { shanten: shantenAfter },
+        },
+      ],
+    };
+  };
+
+  for (let t = 0; t < 34; t++) {
+    if (hand[t] === 4) {
+      const d = tryKong(t, true);
+      if (d) return d; // 暗杠隐蔽性更高，优先于补杠
+    }
+  }
+  for (let t = 0; t < 34; t++) {
+    if (hand[t] >= 1 && melds.some((m) => m.type === 'peng' && tileIdToIndex(m.tiles[0]) === t)) {
+      const d = tryKong(t, false);
+      if (d) return d;
+    }
+  }
+  return null;
+}
+
 function decideDiscard(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset): Decision {
   // 自摸已胡：直接胡（v1 不做默胡策略）
   const flags: WinContext['flags'] = {};
@@ -66,6 +117,11 @@ function decideDiscard(view: PlayerView, difficulty: Difficulty, ruleset: Rulese
   });
   scored.sort((a, b) => b.score - a.score);
   const best = scored[0];
+
+  // W0：暗杠/补杠（保持/改善向听时），优先于出牌
+  const gang = gangDecisionOf(view, ruleset, best.e.shantenAfter, best.score);
+  if (gang) return gang;
+
   const margin = best.score - (scored[1]?.score ?? 0);
 
   const shantenText =
@@ -155,4 +211,11 @@ export function decide(view: PlayerView, difficulty: Difficulty, ruleset: Rulese
   if (view.phase === 'action') return decideDiscard(view, difficulty, ruleset);
   if (view.phase === 'claims') return decideClaim(view, difficulty, ruleset);
   throw new Error(`阶段 ${view.phase} 无决策`);
+}
+
+/** 档位统一入口（M1）：调用方（对局页/教练/模拟/对打脚本）一律走此分发，避免散落 if。
+ *  一档 = 既有启发式（行为保持不变）；二档在 W4 落地前显式报错，不做静默回退。 */
+export function decideWithTier(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset, aiTier: AiTier): Decision {
+  if (aiTier === 1) return decide(view, difficulty, ruleset);
+  throw new Error('AI 二档决策器尚未实现（计划 W4 rollout）；当前仅支持一档');
 }

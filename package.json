@@ -12,7 +12,8 @@
     "test:sim": "vitest run --config vitest.sim.config.ts",
     "e2e": "playwright test",
     "lint": "eslint .",
-    "calibrate": "tsx scripts/calibrate.ts"
+    "calibrate": "tsx scripts/calibrate.ts",
+    "tournament": "tsx scripts/tournament.ts"
   },
   "dependencies": {
     "idb": "^8.0.0",

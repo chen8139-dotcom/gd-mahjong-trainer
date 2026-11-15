@@ -3,6 +3,9 @@ import type { GameAction } from '../game-types';
 
 export type Difficulty = 'novice' | 'intermediate' | 'expert';
 
+/** AI 能力档位：1 = 经典启发式（既有），2 = 实战档（W4 落地） */
+export type AiTier = 1 | 2;
+
 export interface DecisionReason {
   kind: 'efficiency' | 'danger' | 'fan' | 'claim';
   text: string;

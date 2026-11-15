@@ -7,7 +7,12 @@ import type { GameAction, PlayerView } from '../domain/game-types';
 import { getRuleset } from '../domain/rulesets';
 import { tileName, type TileId } from '../domain/tiles';
 
-/** ⚠️ experimental：进张差 ≥ 2 或向听更差才提示（实现期用 AI vs AI 回放校准） */
+/**
+ * ⚠️ experimental：进张差 ≥ 2 或向听更差才提示（实现期用 AI vs AI 回放校准）。
+ * W0 后复校（2026-11-15，scripts/calibrate.ts 50 局）：进张差分布 p50=-2 p75=0 max=0，
+ * 机械建议为 1；保留 2——expert 自身约半数分歧即牺牲 2 进张（风格性换牌），
+ * 阈值 1 会在小损失上过度提示，2 保持提示的「值得教学」语义。二档落地后按档位复校。
+ */
 export const COACH_THRESHOLDS = { ukeireDiff: 2, shantenDiff: 1 };
 
 export interface CoachHint {
