@@ -16,22 +16,22 @@ export async function completeFirstRun(page: Page): Promise<void> {
   await expectAppReady(page);
 }
 
-/** 进入对局页：关掉可能出现的首启引导与「未完成对局」询问。 */
+/** 进入对局页：自动模式（auto=1）直接开局；手动模式落到「未完成对局」询问或新对局配置页
+ *  （无进行中对局时 /play 会重定向到 /play/new），确认后免询问自动开局。 */
 export async function openPlay(page: Page, query = ''): Promise<void> {
   await page.goto(`/play${query}`);
-  const firstRun = page.getByTestId('first-run');
-  if (await firstRun.isVisible().catch(() => false)) {
-    await page.getByTestId('first-run-confirm').click();
-    await expect(firstRun).toHaveCount(0);
-  }
   const resumeDialog = page.getByTestId('resume-dialog');
   if (await resumeDialog.isVisible({ timeout: 8_000 }).catch(() => false)) {
     // 开新局 → 新对局配置页 → 确认写回设置，/play 免询问自动开局
     await page.getByTestId('resume-no').click();
-    await expect(page.getByTestId('new-game')).toBeVisible();
+  }
+  const playPage = page.getByTestId('play-page');
+  const newGamePage = page.getByTestId('new-game');
+  await expect(playPage.or(newGamePage)).toBeVisible({ timeout: 15_000 });
+  if ((await newGamePage.isVisible()) && (await playPage.count()) === 0) {
     await page.getByTestId('new-game-confirm').click();
   }
-  await expect(page.getByTestId('play-page')).toBeVisible();
+  await expect(playPage).toBeVisible();
 }
 
 /**

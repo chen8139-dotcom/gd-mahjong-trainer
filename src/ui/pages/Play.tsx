@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   newGame,
   applyAction,
@@ -66,6 +66,7 @@ function SeatPanel({ state, seat, pos }: { state: GameState; seat: number; pos: 
 export default function Play() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [session, setSession] = useState<Session | null>(null);
   const [settings, setSettings] = useState<{ difficulty: Difficulty; hintEnabled: boolean } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
@@ -91,6 +92,8 @@ export default function Play() {
   // 自动模式（E2E/演示）：人类座位由同难度 AI 代打
   const autoMode = params.get('auto') === '1';
   const seed = params.get('seed');
+  // 配置页「开始对局」/结算「再来一局」带 autostart 标记回跳：无进行中对局时免询问直接开局
+  const autostart = (location.state as { autostart?: boolean } | null)?.autostart === true;
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -117,6 +120,13 @@ export default function Play() {
           }
           return;
         }
+        // 无进行中对局：先到配置页选流派与难度（首页卡片/导航/直达 URL 一致）；
+        // 配置页「开始对局」与结算「再来一局」带 autostart 标记回跳时才免询问直接开局。
+        // 查询串（如 E2E 的 ?seed=42）透传给配置页，由其确认时原样带回
+        if (!autostart) {
+          navigate({ pathname: '/play/new', search: params.toString() }, { replace: true });
+          return;
+        }
       }
       const state = newGame({ seed: Number(seed ?? Date.now() % 100000), rulesetId: s?.rulesetId ?? 'tuidaohu' });
       const gameId = crypto.randomUUID();
@@ -124,7 +134,7 @@ export default function Play() {
       await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
       setSession({ gameId, state });
     })();
-  }, [autoMode, seed]);
+  }, [autoMode, autostart, seed, navigate]);
 
   const resume = useCallback(async (accept: boolean) => {
     const repo = await getRepository();
@@ -594,7 +604,11 @@ export default function Play() {
                 </div>
               ))}
             </div>
-            <button className="primary" data-testid="new-game" onClick={() => navigate('/play', { replace: true })}>
+            <button
+              className="primary"
+              data-testid="new-game"
+              onClick={() => navigate('/play', { replace: true, state: { autostart: true } })}
+            >
               再来一局
             </button>
           </div>

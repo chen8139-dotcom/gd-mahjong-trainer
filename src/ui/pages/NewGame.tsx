@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getRepository } from '../../app/store';
 import { deserializeSnapshot } from '../../app/game-controller';
 import type { Settings } from '../../data/repository';
@@ -14,6 +14,7 @@ import { DIFF_NAMES } from './Settings';
  *  /play 用免询问路径自动开局（replace 进历史，避免对局中后退误入本页二次确认）。 */
 export default function NewGame() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [base, setBase] = useState<Settings>({
     rulesetId: 'tuidaohu',
     difficulty: 'intermediate',
@@ -63,48 +64,68 @@ export default function NewGame() {
       if (still) await repo.finishGame(ongoing.gameId, 'abandoned');
     }
     await repo.saveSettings({ ...base, rulesetId, difficulty, hintEnabled });
-    navigate('/play', { replace: true });
+    // 透传来源查询串（如 E2E 的 ?seed=42）：确定性开局不受配置页往返影响
+    navigate({ pathname: '/play', search: params.toString() }, { replace: true, state: { autostart: true } });
   };
 
   return (
-    <div className="page" data-testid="new-game">
-      <h2>新对局</h2>
-      <p className="muted">选好流派与难度后开始；这些选择会记为默认设置。</p>
-      {ongoing && (
-        <p className="new-game-hint" data-testid="new-game-abandon-note">
-          ⚠️ 确认开始后将放弃当前进行中的对局（{ongoing.summary}）；点「返回」可回到恢复询问继续原局。
-        </p>
-      )}
-      <RulesetPicker selected={rulesetId} onChange={setRulesetId} prefix="new-game" />
+    <div className="page new-game-wrap" data-testid="new-game">
+      <div className="new-game-panel">
+        <div className="new-game-brand" aria-hidden="true">
+          🀄 <span>麻将陪练</span>
+        </div>
+        <h2>新对局</h2>
+        <p className="new-game-sub">选好流派与难度后开始；这些选择会记为默认设置。</p>
+        {ongoing && (
+          <p className="new-game-hint" data-testid="new-game-abandon-note">
+            ⚠️ 确认开始后将放弃当前进行中的对局（{ongoing.summary}）；点「返回」可回到恢复询问继续原局。
+          </p>
+        )}
+        <div className="new-game-options">
+          <RulesetPicker selected={rulesetId} onChange={setRulesetId} prefix="new-game" />
+        </div>
 
-      <label className="ruleset-row">
-        AI 难度
-        <select value={difficulty} onChange={(e) => setDifficulty(e.target.value as Difficulty)} data-testid="new-game-difficulty">
-          {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
-            <option key={d} value={d}>
-              {DIFF_NAMES[d]}
-            </option>
-          ))}
-        </select>
-      </label>
+        <div className="new-game-options">
+          <label className="option-card">
+            <b>AI 难度</b>
+            <select
+              value={difficulty}
+              onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+              data-testid="new-game-difficulty"
+            >
+              {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
+                <option key={d} value={d}>
+                  {DIFF_NAMES[d]}
+                </option>
+              ))}
+            </select>
+          </label>
 
-      <label className="ruleset-row">
-        <input
-          type="checkbox"
-          checked={hintEnabled}
-          onChange={(e) => setHintEnabled(e.target.checked)}
-          data-testid="new-game-hint"
-        />
-        对局中显示教练提示
-      </label>
+          <label className="option-card option-card-check">
+            <input
+              type="checkbox"
+              checked={hintEnabled}
+              onChange={(e) => setHintEnabled(e.target.checked)}
+              data-testid="new-game-hint"
+            />
+            <span>
+              <b>教练提示</b>
+              <small>对局中对比 AI 的选择，实时提醒亏牌点</small>
+            </span>
+          </label>
+        </div>
 
-      <div className="new-game-actions">
-        <button data-testid="new-game-back" onClick={() => navigate('/play')}>
-          返回
-        </button>
-        <button className="primary" data-testid="new-game-confirm" disabled={starting} onClick={() => void confirm()}>
-          开始对局
-        </button>
+        <div className="new-game-actions">
+          {/* 返回仅在放弃进行中对局的场景有意义；首次进入（无对局可反悔）不显示 */}
+          {ongoing && (
+            <button data-testid="new-game-back" onClick={() => navigate('/play')}>
+              返回
+            </button>
+          )}
+          <button className="primary" data-testid="new-game-confirm" disabled={starting} onClick={() => void confirm()}>
+            {starting ? '正在开局…' : '开始对局'}
+          </button>
+        </div>
       </div>
     </div>
   );
