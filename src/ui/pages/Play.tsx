@@ -176,13 +176,14 @@ export default function Play() {
 
   // AI 驱动：非人类回合或宣称窗口自动处理；导出/导入弹层打开时冻结对局
   useEffect(() => {
-    if (!session || session.state.result || resumeCandidate || dialog) return;
+    if (!session || resumeCandidate || dialog) return;
     const st = session.state;
     if (st.phase === 'dealing') return;
     if (st.phase === 'over') {
       persistFinish(st);
       return;
     }
+    if (st.result) return;
     const difficulty = settings?.difficulty ?? 'intermediate';
     const rs = getRuleset(st.rulesetId);
     const human = playerView(st, HUMAN_SEAT);
@@ -593,7 +594,7 @@ export default function Play() {
                 </div>
               ))}
             </div>
-            <button className="primary" data-testid="new-game" onClick={() => window.location.assign('/play')}>
+            <button className="primary" data-testid="new-game" onClick={() => navigate('/play', { replace: true })}>
               再来一局
             </button>
           </div>

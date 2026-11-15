@@ -1,4 +1,4 @@
-import { NavLink, Route, Routes } from 'react-router-dom';
+import { NavLink, Route, Routes, useLocation } from 'react-router-dom';
 import Calculator from './ui/pages/Calculator';
 import Home from './ui/pages/Home';
 import Play from './ui/pages/Play';
@@ -32,13 +32,14 @@ function renderTab(t: TabDef) {
 }
 
 export default function App() {
+  const location = useLocation();
   // 无首启引导：新用户直接进入首页，规则集等设置均走各页面的默认值（可在设置中修改）
   return (
     <div className="app">
       <main className="app-main">
         <Routes>
           <Route path="/" element={<Home />} />
-          <Route path="/play" element={<Play />} />
+          <Route path="/play" element={<Play key={location.key} />} />
           <Route path="/play/new" element={<NewGame />} />
           <Route path="/calculator" element={<Calculator />} />
           <Route path="/learn" element={<Learn />} />
