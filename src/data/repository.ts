@@ -14,7 +14,7 @@ export interface GameMeta {
   rulesetId: string;
   startedAt: number;
   finishedAt: number | null;
-  outcome: 'ongoing' | 'win' | 'loss' | 'draw';
+  outcome: 'ongoing' | 'win' | 'loss' | 'draw' | 'abandoned';
 }
 
 export interface QuizProgress {

@@ -4,7 +4,7 @@ import { BUILTIN_RULESETS, getRuleset } from '../../domain/rulesets';
 import type { Settings } from '../../data/repository';
 import type { Difficulty } from '../../domain/ai/types';
 
-const DIFF_NAMES: Record<Difficulty, string> = { novice: '新手（纯效率）', intermediate: '进阶（效率+防守）', expert: '老手（加番数规划）' };
+export const DIFF_NAMES: Record<Difficulty, string> = { novice: '新手（纯效率）', intermediate: '进阶（效率+防守）', expert: '老手（加番数规划）' };
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);

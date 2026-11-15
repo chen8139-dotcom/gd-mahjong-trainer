@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   newGame,
   applyAction,
@@ -65,11 +65,14 @@ function SeatPanel({ state, seat, pos }: { state: GameState; seat: number; pos: 
 
 export default function Play() {
   const [params] = useSearchParams();
+  const navigate = useNavigate();
   const [session, setSession] = useState<Session | null>(null);
   const [settings, setSettings] = useState<{ difficulty: Difficulty; hintEnabled: boolean } | null>(null);
   const [hint, setHint] = useState<string | null>(null);
   const [divergences, setDivergences] = useState<Divergence[]>([]);
   const [resumeCandidate, setResumeCandidate] = useState<string | null>(null);
+  // 恢复询问页的摘要行（流派·巡数·余张），快照解析失败时省略、不影响恢复本身
+  const [resumeInfo, setResumeInfo] = useState<string | null>(null);
   // 对局导出/导入：仅在玩家出牌回合提供入口（wall-tools）；弹层打开时对局冻结（AI 暂停），保证导出的一刻与界面一致
   const [dialog, setDialog] = useState<'export' | 'import' | null>(null);
   const [exportNote, setExportNote] = useState('');
@@ -102,6 +105,16 @@ export default function Play() {
         const ongoing = (await repo.listGames(5)).find((g) => g.outcome === 'ongoing');
         if (ongoing) {
           setResumeCandidate(ongoing.id);
+          try {
+            const snaps = await repo.loadSnapshots(ongoing.id);
+            const last = snaps[snaps.length - 1];
+            if (last) {
+              const st = deserializeSnapshot(last.json);
+              setResumeInfo(`${getRuleset(st.rulesetId).name} · 第 ${st.discardCount} 巡 · 余 ${st.wall.length} 张`);
+            }
+          } catch {
+            // 摘要拿不到就只显示通用文案；真正恢复时另有兜底提示
+          }
           return;
         }
       }
@@ -117,13 +130,12 @@ export default function Play() {
     const repo = await getRepository();
     const id = resumeCandidate;
     setResumeCandidate(null);
-    if (!id || !accept) {
-      const s = await repo.getSettings();
-      const state = newGame({ seed: Date.now() % 100000, rulesetId: s?.rulesetId ?? 'tuidaohu' });
-      const gameId = crypto.randomUUID();
-      await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
-      await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
-      setSession({ gameId, state });
+    if (!id) return;
+    if (!accept) {
+      // 开新局：先去新对局配置页选流派/难度；旧局保持 ongoing 不动——
+      // 配置页可「返回」或浏览器后退回到本询问页，反悔有路；
+      // 直到配置页「开始对局」确认时才把旧局标记为 abandoned。
+      navigate('/play/new');
       return;
     }
     const snaps = await repo.loadSnapshots(id);
@@ -133,7 +145,7 @@ export default function Play() {
       return;
     }
     setSession({ gameId: id, state: deserializeSnapshot(last.json) });
-  }, [resumeCandidate]);
+  }, [resumeCandidate, navigate]);
 
   // 落库单步快照 + 应用动作
   // 落库单步快照 + 应用动作；非法动作转为顶部错误提示，避免更新期抛错导致白屏
@@ -344,15 +356,25 @@ export default function Play() {
 
   if (resumeCandidate) {
     return (
-      <div className="page" data-testid="resume-dialog">
-        <h2>检测到未完成的对局</h2>
-        <p>是否从上次离开的地方继续？</p>
-        <button className="primary" data-testid="resume-yes" onClick={() => void resume(true)}>
-          继续上局
-        </button>
-        <button data-testid="resume-no" onClick={() => void resume(false)}>
-          开新局
-        </button>
+      <div className="page play-page resume-page" data-testid="resume-dialog">
+        <div className="resume-panel">
+          <div className="tile-backs resume-fan" aria-hidden="true">
+            <span className="tile-back" />
+            <span className="tile-back" />
+            <span className="tile-back" />
+          </div>
+          <h2>检测到未完成的对局</h2>
+          <p className="resume-sub">是否从上次离开的地方继续？</p>
+          {resumeInfo && <p className="resume-meta">{resumeInfo}</p>}
+          <div className="resume-actions">
+            <button className="primary" data-testid="resume-yes" onClick={() => void resume(true)}>
+              继续上局
+            </button>
+            <button data-testid="resume-no" onClick={() => void resume(false)}>
+              开新局
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
