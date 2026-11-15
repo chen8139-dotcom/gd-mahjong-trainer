@@ -127,8 +127,16 @@ export default function Play() {
   }, [resumeCandidate]);
 
   // 落库单步快照 + 应用动作
+  // 落库单步快照 + 应用动作；非法动作转为顶部错误提示，避免更新期抛错导致白屏
   const step = useCallback((cur: Session, action: GameAction, claimant?: number): Session => {
-    const next = { ...cur, state: applyAction(cur.state, action, claimant) };
+    let state: GameState;
+    try {
+      state = applyAction(cur.state, action, claimant);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+      return cur;
+    }
+    const next = { ...cur, state };
     void getRepository()
       .then((repo) => repo.appendSnapshot(next.gameId, next.state.snapshotSeq, serializeSnapshot(next.state)))
       .catch((e) => setError(String(e)));
@@ -161,7 +169,7 @@ export default function Play() {
     if (st.phase === 'action' && (st.turn !== HUMAN_SEAT || autoMode)) {
       const timer = setTimeout(() => {
         const d = decide(playerView(st, st.turn), difficulty, rs);
-        setSession((cur) => (cur ? step(cur, d.action) : cur));
+        setSession(step(session, d.action));
       }, 120);
       return () => clearTimeout(timer);
     }
@@ -179,12 +187,12 @@ export default function Play() {
         if (!autoMode && humanClaims.length > 0) {
           const hp = (a: GameAction): number => (a.type === 'win' ? 3 : a.type === 'peng' || a.type === 'mingGang' ? 2 : 1);
           if (best && best.priority > Math.max(...humanClaims.map(hp))) {
-            setSession((cur) => (cur ? step(cur, best!.action, best!.seat) : cur));
+            setSession(step(session, best!.action, best!.seat));
             return;
           }
           return; // 等待人类选择（UI 显示按钮）
         }
-        setSession((cur) => (cur ? step(cur, best?.action ?? { type: 'pass' }, best?.seat) : cur));
+        setSession(step(session, best?.action ?? { type: 'pass' }, best?.seat));
       }, 150);
       return () => clearTimeout(timer);
     }
@@ -201,7 +209,9 @@ export default function Play() {
     } else {
       setHint(null);
     }
-    setSession((cur) => (cur ? step(cur, action) : cur));
+    // claims 阶段的胡/碰/杠/吃必须以人类座位为宣称者（phase 的 turn 仍是出牌者），
+    // 否则会按出牌者校验抛错或产生错乱副露
+    setSession(step(session, action, st.phase === 'claims' ? HUMAN_SEAT : undefined));
   };
 
   const view = useMemo(() => (session ? playerView(session.state, HUMAN_SEAT) : null), [session]);
