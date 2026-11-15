@@ -9,7 +9,8 @@ import {
   type GameState,
 } from '../../app/game-controller';
 import { legalActions } from '../../domain/engine';
-import { tileName, tileNames } from '../../domain/tiles';
+import { tileName, tileNames, toCounts, tileIdToIndex } from '../../domain/tiles';
+import { evaluateWin } from '../../domain/score';
 import { evaluateTurn, type Divergence } from '../../app/coach';
 import { getRepository } from '../../app/store';
 import { getRuleset } from '../../domain/rulesets';
@@ -222,6 +223,31 @@ export default function Play() {
     [view, session],
   );
 
+  // 牌型已成型但番数不足起胡（如鸡平胡 3 番起胡）：给出教学提示，而不是无声地隐藏胡按钮
+  const blockedWin = useMemo(() => {
+    if (!session || !view || session.state.result) return null;
+    const rs = getRuleset(view.rulesetId);
+    const st = session.state;
+    const evalBlocked = (counts: number[], selfDraw: boolean) => {
+      const r = evaluateWin(counts, {
+        ruleset: rs,
+        melded: view.melds[view.seat],
+        selfDraw,
+        menqing: view.melds[view.seat].length === 0,
+        flags: {},
+      });
+      if (!('cannotWin' in r) || r.reason !== 'below-starting-fan') return null;
+      return { ...r.blocked, rulesetName: rs.name, startingFan: rs.startingFan };
+    };
+    if (myTurn) return evalBlocked(toCounts(view.hand), true);
+    if (st.phase === 'claims' && st.lastDiscard && st.lastDiscard.from !== HUMAN_SEAT) {
+      const counts = toCounts(view.hand);
+      counts[tileIdToIndex(st.lastDiscard.tile)]++;
+      return evalBlocked(counts, false);
+    }
+    return null;
+  }, [view, session, myTurn]);
+
   if (resumeCandidate) {
     return (
       <div className="page" data-testid="resume-dialog">
@@ -301,6 +327,14 @@ export default function Play() {
           {hint && !result && (
             <div className="calc-hint" data-testid="coach-hint">
               💡 {hint}
+            </div>
+          )}
+
+          {blockedWin && !result && (
+            <div className="calc-hint" data-testid="fan-blocked-hint">
+              ℹ️ 已构成胡牌牌型：{blockedWin.matched.map((m) => `${m.name} ${m.fan}番`).join(' + ')}，合计{' '}
+              {blockedWin.total} 番，不足「{blockedWin.rulesetName}」起胡 {blockedWin.startingFan}
+              番，不能宣布胡牌
             </div>
           )}
 

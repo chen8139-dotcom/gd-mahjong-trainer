@@ -25,7 +25,13 @@ export interface FanResult {
 
 export type WinEvaluation =
   | FanResult
-  | { cannotWin: true; reason: 'no-shape' | 'below-starting-fan' };
+  | { cannotWin: true; reason: 'no-shape' }
+  | {
+      cannotWin: true;
+      reason: 'below-starting-fan';
+      /** 牌型已成型但番数不足起胡时的最高番明细（教学提示用） */
+      blocked: { total: number; matched: MatchedYaku[] };
+    };
 
 // 七对/十三幺专用路径只叠加场况类番种（不走结构谓词），谓词照常执行
 const SPECIAL_PATH_WHENS = new Set(['base', 'zimo', 'menqing', 'gangkai', 'qianggang', 'haidi', 'tianhu', 'dihu']);
@@ -64,6 +70,8 @@ export function evaluateWin(counts14: number[], ctx: WinContext): WinEvaluation 
   let best: FanResult | null = null;
   let bestRaw = 0;
   let anyWin = false;
+  let bestBlocked: FanResult | null = null;
+  let bestBlockedRaw = 0;
   for (const c of cands) {
     const matched = rs.yaku.filter((def) => {
       if (c.specialWhen) {
@@ -100,8 +108,33 @@ export function evaluateWin(counts14: number[], ctx: WinContext): WinEvaluation 
         };
         bestRaw = rawTotal;
       }
+    } else {
+      // 不足起胡：仍记录最高番明细供教学提示（同 total 时取原始番更高者）
+      const betterBlocked =
+        !bestBlocked ||
+        total > bestBlocked.total ||
+        (total === bestBlocked.total && rawTotal > bestBlockedRaw);
+      if (betterBlocked) {
+        bestBlocked = {
+          total,
+          capped,
+          form: c.form,
+          matched: kept.map((d) => ({ yakuId: d.id, name: d.name, fan: d.fan })),
+          decomp: c.decomp,
+        };
+        bestBlockedRaw = rawTotal;
+      }
     }
   }
-  if (!anyWin || !best) return { cannotWin: true, reason: 'below-starting-fan' };
+  if (!anyWin || !best) {
+    if (bestBlocked) {
+      return {
+        cannotWin: true,
+        reason: 'below-starting-fan',
+        blocked: { total: bestBlocked.total, matched: bestBlocked.matched },
+      };
+    }
+    return { cannotWin: true, reason: 'no-shape' };
+  }
   return best;
 }
