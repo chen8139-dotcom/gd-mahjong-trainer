@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { getRepository } from '../../app/store';
 import { setTileSkin } from '../../app/skin';
-import { getRuleset } from '../../domain/rulesets';
 import { DEFAULT_SETTINGS, type Settings, type TileSkin } from '../../data/repository';
 
 const SKIN_NAMES: Record<TileSkin, string> = { default: '默认', majsoul: '雀魂皮肤' };
@@ -54,7 +53,6 @@ export default function SettingsPage() {
   };
 
   if (!settings) return <div className="page">加载中…</div>;
-  const ruleset = getRuleset(settings.rulesetId);
 
   return (
     <div className="page" data-testid="settings-page">
@@ -84,21 +82,6 @@ export default function SettingsPage() {
         />
         对局中显示教练提示
       </label>
-
-      <details className="fan-preview" data-testid="fan-table">
-        <summary>上次所选流派番种表（全文）</summary>
-        <table>
-          <tbody>
-            {ruleset.yaku.map((y) => (
-              <tr key={y.id}>
-                <td>{y.name}</td>
-                <td>{y.fan} 番</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <small>起胡 {ruleset.startingFan} 番；{ruleset.capFan === null ? '不封顶' : `${ruleset.capFan} 番封顶`}。⚠️ experimental：以常见规则初版为准。</small>
-      </details>
 
       <div className="mode-row">
         <button onClick={() => void exportData()} data-testid="export-btn">

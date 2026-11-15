@@ -50,7 +50,7 @@ export default function RulesetPicker({
               </span>
             ))}
           </p>
-          <small>⚠️ 番种表为常见规则初版，可在设置中查看全文。</small>
+          <small>⚠️ 番种表为常见规则初版，全文可在学习中心查看。</small>
         </details>
       )}
     </>

@@ -11,14 +11,8 @@ test('新对局页写回流派；设置页导出→清→导入一致（SC-9）'
   await page.getByTestId('new-game-confirm').click();
   await expect(page.getByTestId('play-page')).toBeVisible({ timeout: 15_000 });
 
-  // 设置页番种表随上次所选流派展示（港式新章：起胡 3 番）
-  await page.goto('/settings');
-  const fanTable = page.getByTestId('fan-table');
-  await expect(fanTable).toBeVisible();
-  await fanTable.locator('summary').click();
-  await expect(fanTable).toContainText('起胡 3 番');
-
   // 导出
+  await page.goto('/settings');
   const downloadPromise = page.waitForEvent('download');
   await page.getByTestId('export-btn').click();
   const download = await downloadPromise;
