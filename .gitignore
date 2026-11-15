@@ -6,3 +6,11 @@ coverage/
 test-results/
 playwright-report/
 dev-dist/
+
+# 部署密钥与敏感文件（对齐 love-space 约定，永不入库）
+deployment/ECSdeploy.pem
+*.pem
+deployment/.env*
+
+# ZCode 工作区本地配置
+.zcode/
