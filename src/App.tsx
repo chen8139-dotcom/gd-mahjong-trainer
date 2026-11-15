@@ -8,13 +8,30 @@ import Learn from './ui/pages/Learn';
 import SettingsPage from './ui/pages/Settings';
 import { getRepository } from './app/store';
 
-const TABS = [
-  { to: '/', label: '首页', testId: 'nav-home' },
-  { to: '/play', label: '陪练', testId: 'nav-play' },
-  { to: '/calculator', label: '计算器', testId: 'nav-calculator' },
-  { to: '/learn', label: '学习', testId: 'nav-learn' },
-  { to: '/settings', label: '设置', testId: 'nav-settings' },
+interface TabDef {
+  to: string;
+  label: string;
+  icon: string;
+  testId: string;
+}
+
+/** 主导航项（「设置」单独放 nav-footer，桌面侧栏钉在栏底，参照 launcher 布局）。 */
+const TABS: TabDef[] = [
+  { to: '/', label: '首页', icon: '🏠', testId: 'nav-home' },
+  { to: '/play', label: '陪练', icon: '🀄', testId: 'nav-play' },
+  { to: '/calculator', label: '计算器', icon: '🧮', testId: 'nav-calculator' },
+  { to: '/learn', label: '学习', icon: '📖', testId: 'nav-learn' },
 ];
+const SETTINGS_TAB: TabDef = { to: '/settings', label: '设置', icon: '⚙️', testId: 'nav-settings' };
+
+function renderTab(t: TabDef) {
+  return (
+    <NavLink key={t.to} to={t.to} end={t.to === '/'} className="nav-item" data-testid={t.testId}>
+      <span className="nav-icon" aria-hidden="true">{t.icon}</span>
+      <span className="nav-label">{t.label}</span>
+    </NavLink>
+  );
+}
 
 export default function App() {
   // 首次启动检测：无设置 → 引导页（SC-5）
@@ -53,12 +70,11 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </main>
-      <nav className="bottom-nav">
-        {TABS.map((t) => (
-          <NavLink key={t.to} to={t.to} end={t.to === '/'} className="nav-item" data-testid={t.testId}>
-            {t.label}
-          </NavLink>
-        ))}
+      {/* 双形态导航：<960px 底部栏（同旧观感），≥960px 左侧栏（品牌区 + 图标文字项 + 底部设置） */}
+      <nav className="app-nav">
+        <div className="nav-brand" aria-hidden="true">🀄 麻将陪练</div>
+        {TABS.map(renderTab)}
+        <div className="nav-footer">{renderTab(SETTINGS_TAB)}</div>
       </nav>
     </div>
   );

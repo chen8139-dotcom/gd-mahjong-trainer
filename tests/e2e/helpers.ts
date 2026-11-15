@@ -1,9 +1,9 @@
 import { expect, type Page } from '@playwright/test';
 
 /** App 异步判定「是否有设置」期间渲染空态（first-run 计数为 0 但马上可能变 1）。
- *  必须等底部导航渲染（设置判定已完成的正面指标）后再做后续断言。 */
+ *  必须等导航渲染（设置判定已完成的正面指标）后再做后续断言。 */
 export async function expectAppReady(page: Page): Promise<void> {
-  await expect(page.locator('.bottom-nav')).toBeVisible({ timeout: 30_000 });
+  await expect(page.locator('.app-nav')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('first-run')).toHaveCount(0);
 }
 
@@ -14,7 +14,7 @@ export async function expectAppReady(page: Page): Promise<void> {
  */
 export async function completeFirstRun(page: Page, radioTestId?: string): Promise<void> {
   const dialog = page.getByTestId('first-run');
-  const nav = page.locator('.bottom-nav');
+  const nav = page.locator('.app-nav');
   await page.goto('/');
   for (let i = 0; i < 3; i++) {
     await expect(dialog.or(nav)).toBeVisible({ timeout: 30_000 });
