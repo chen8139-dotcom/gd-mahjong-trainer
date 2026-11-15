@@ -103,6 +103,22 @@ button { touch-action: manipulation; }
 .radio-card input { width: 20px; height: 20px; }
 .fan-preview { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin: 10px 0; }
 .fan-preview table { width: 100%; border-collapse: collapse; }
+/* 番种表预览：自定义展开箭头 + 番种药丸（首启/新对局页共用；面板底色随页面各自作用域） */
+.fan-preview summary {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; list-style: none; font-weight: 600; user-select: none;
+}
+.fan-preview summary::-webkit-details-marker { display: none; }
+.fan-preview-caret { display: inline-block; transition: transform 150ms ease; color: #5c6e63; }
+.fan-preview[open] .fan-preview-caret { transform: rotate(90deg); }
+.fan-tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0 8px; }
+.fan-tag {
+  display: inline-flex; align-items: baseline; gap: 3px;
+  padding: 3px 10px; border-radius: 999px; font-size: 12px; color: var(--ink);
+  background: rgba(255, 255, 255, 0.6); border: 1px solid rgba(10, 125, 79, 0.18);
+}
+.fan-tag b { color: #145238; font-weight: 700; }
+.fan-preview > small { color: #5c6e63; }
 .fan-preview td { border-bottom: 1px solid var(--line); padding: 4px 2px; font-size: 13px; }
 
 .play-page {
@@ -120,6 +136,93 @@ button { touch-action: manipulation; }
 .play-page .tray > span { color: #cfe6d8; }
 .play-page .tray-tiles { border-bottom-color: rgba(255, 255, 255, 0.25); }
 .play-page .calc-hint { background: rgba(255, 255, 255, 0.9); border-radius: 6px; padding: 6px 8px; }
+
+/* 未完成对局恢复页：牌桌同款绿毡底，中央一张拟真象牙「大牌」面板（风格对齐桌面陪练页） */
+.resume-page {
+  max-width: 100%;
+  min-height: calc(100vh - 88px); /* 移动端：扣除底栏垫高 64px + 页内边距 24px */
+  display: flex; align-items: center; justify-content: center;
+}
+.resume-panel {
+  width: 100%; max-width: 380px;
+  background: linear-gradient(165deg, #f9f3dd 0%, #efe6c8 100%);
+  border: 1px solid rgba(0, 0, 0, 0.28); border-radius: 14px;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -3px 4px rgba(150, 128, 80, 0.28), 0 14px 34px rgba(0, 0, 0, 0.45);
+  padding: 28px 28px 26px; text-align: center;
+}
+.resume-panel .tile-backs { justify-content: center; max-width: none; }
+.resume-panel .tile-back { width: 30px; height: 42px; border-radius: 5px; }
+.resume-panel .tile-back:nth-child(1) { transform: rotate(-8deg) translateY(3px); }
+.resume-panel .tile-back:nth-child(2) { transform: translateY(-3px); }
+.resume-panel .tile-back:nth-child(3) { transform: rotate(8deg) translateY(3px); }
+.resume-panel h2 { color: var(--ink); margin: 14px 0 6px; }
+.resume-panel .resume-sub { color: #5c6e63; margin: 0; font-size: 14px; }
+.resume-panel .resume-meta {
+  display: inline-block; margin: 12px 0 0; padding: 4px 14px; border-radius: 999px;
+  background: rgba(12, 61, 42, 0.08); color: #145238; font-size: 13px; font-weight: 600;
+}
+.resume-actions { display: flex; gap: 10px; margin-top: 22px; }
+.resume-actions button { flex: 1; min-height: 44px; border-radius: 8px; font-size: 15px; cursor: pointer; }
+.resume-actions .primary { background: #ffd97a; color: #5a4500; border: 1px solid #d8b558; font-weight: 700; }
+.resume-actions button:not(.primary) { background: #fff; color: var(--ink); border: 1px solid var(--line); }
+
+/* 首启引导页：绿毡全屏欢迎（风格对齐牌桌/恢复页）；流派牌卡样式仅作用于本页，
+   不影响 Home 卡片与 NewGame 页共用的 .radio-card 原样 */
+.first-run {
+  min-height: 100vh; display: flex; padding: 40px 20px;
+  background: radial-gradient(ellipse at 50% 28%, #20794e 0%, #145238 60%, #0c3d2a 100%);
+  box-shadow: inset 0 0 60px rgba(0, 0, 0, 0.35);
+}
+.first-run-inner { margin: auto; width: 100%; max-width: 640px; } /* margin:auto 垂直居中且超高不裁顶 */
+.first-run-brand {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  color: #f2ead0; font-weight: 600; font-size: 15px; letter-spacing: 0.04em;
+}
+.first-run h2 { color: #f2ead0; font-size: 24px; text-align: center; margin: 10px 0 6px; }
+.first-run .first-run-sub { color: #b9d6c6; text-align: center; margin: 0 0 26px; font-size: 14px; }
+.first-run-options { display: grid; grid-template-columns: 1fr; gap: 12px; }
+.first-run .radio-card {
+  display: flex; align-items: flex-start; gap: 12px; margin: 0;
+  background: linear-gradient(165deg, #f9f3dd 0%, #efe6c8 100%);
+  border: 1px solid rgba(0, 0, 0, 0.28); border-radius: 12px;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 3px rgba(150, 128, 80, 0.22), 0 4px 10px rgba(0, 0, 0, 0.28);
+  padding: 14px 16px;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+}
+.first-run .radio-card:hover { transform: translateY(-2px); border-color: rgba(10, 125, 79, 0.45); }
+.first-run .radio-card:has(input:checked) {
+  border-color: rgba(10, 125, 79, 0.55);
+  background: linear-gradient(165deg, #f4f3d9 0%, #e2ebd0 100%); /* 选中：淡绿洗染 */
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 3px rgba(150, 128, 80, 0.22), 0 4px 10px rgba(0, 0, 0, 0.28), 0 0 0 3px rgba(10, 125, 79, 0.14);
+}
+.first-run .radio-card input[type='radio'] {
+  appearance: none; flex: none; width: 18px; height: 18px; margin: 2px 0 0;
+  border-radius: 50%; border: 2px solid #b7ad99; background: #fff; cursor: pointer;
+  transition: 120ms ease;
+}
+.first-run .radio-card input[type='radio']:checked {
+  border-color: var(--green);
+  background: radial-gradient(circle, var(--green) 0, var(--green) 5px, #fff 5.5px);
+}
+.first-run .radio-card span { display: flex; flex-direction: column; gap: 3px; }
+.first-run .radio-card span br { display: none; } /* br 在 flex column 中会变成空 item 撑出空隙 */
+.first-run .radio-card b { color: var(--ink); font-size: 15px; }
+.first-run .radio-card small { color: #5c6e63; font-size: 12px; }
+.first-run .fan-preview {
+  grid-column: 1 / -1; margin: 18px 0 0; padding: 12px 16px;
+  background: linear-gradient(165deg, #f9f3dd 0%, #efe6c8 100%);
+  border: 1px solid rgba(0, 0, 0, 0.28); border-radius: 12px;
+  box-shadow: inset 0 1px 0 #ffffff, inset 0 -2px 3px rgba(150, 128, 80, 0.22);
+}
+.first-run button.primary {
+  background: #ffd97a; color: #5a4500; border: 1px solid #d8b558; font-weight: 700;
+  border-radius: 10px; min-height: 48px; font-size: 16px; width: 100%; margin-top: 22px;
+}
+.first-run button.primary:hover { filter: brightness(1.04); }
+.first-run button.primary:active { transform: translateY(1px); }
+@media (min-width: 640px) {
+  .first-run-options { grid-template-columns: 1fr 1fr; }
+}
 .seat.active { color: #ffd97a; font-weight: 700; }
 .meld-row { display: flex; }
 .meld { display: inline-flex; margin-left: 4px; }
@@ -321,6 +424,8 @@ button { touch-action: manipulation; }
   .table-page .tray .honor-wind, .table-page .tray .honor-zhong, .table-page .tray .honor-fa { font-size: 32px; }
   .table-page .action-bar { justify-content: center; }
   .me-area .calc-hint { align-self: center; text-align: center; }
+  /* 桌面无底栏垫高：恢复询问页绿毡撑满主区 */
+  .resume-page { min-height: calc(100vh - 24px); }
 }
 
 /* ≥960px 桌面：手牌 hover 抬起（非线性缓动 + 小回弹）；系统开启「减少动态效果」时不生效。

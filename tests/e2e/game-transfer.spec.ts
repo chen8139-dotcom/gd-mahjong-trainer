@@ -1,24 +1,6 @@
-import { test, expect, type Page } from '@playwright/test';
-import { completeFirstRun, openPlay } from './helpers';
+import { test, expect } from '@playwright/test';
+import { completeFirstRun, openPlay, discardAndBackToMyTurn } from './helpers';
 import fs from 'node:fs';
-
-/**
- * 玩家打出第一张手牌，处理途中出现的碰/杠/吃/胡宣称（一律「过」），
- * 直到回合回到玩家（导出/导入入口重新出现）。
- */
-async function discardAndBackToMyTurn(page: Page): Promise<void> {
-  const exportBtn = page.getByTestId('export-game-btn');
-  const claimBar = page.getByTestId('claim-bar');
-  await page.getByTestId('hand-tray').locator('button.tile-face').first().click();
-  await expect(exportBtn).toBeHidden({ timeout: 5_000 }); // 离开我的回合即收起入口
-  for (;;) {
-    // 等待「出现宣称条」或「回到我的回合」二者其一（不能一次性 isVisible，渲染有延迟）
-    await expect(claimBar.or(exportBtn)).toBeVisible({ timeout: 20_000 });
-    if (await exportBtn.isVisible()) return;
-    await page.getByTestId('claim-pass').click();
-    await expect(claimBar).toBeHidden({ timeout: 5_000 });
-  }
-}
 
 test('对局导出→导入：跨会话恢复同一局面并继续可打', async ({ page }) => {
   test.setTimeout(120_000); // 首启引导 + AI 对局等待 + 下载 + 刷新导入，默认 30s 不够
