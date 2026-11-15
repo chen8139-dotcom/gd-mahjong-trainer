@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getRepository } from '../../app/store';
 import { deserializeSnapshot } from '../../app/game-controller';
 import type { Settings } from '../../data/repository';
@@ -14,6 +14,7 @@ import { DIFF_NAMES } from './Settings';
  *  /play 用免询问路径自动开局（replace 进历史，避免对局中后退误入本页二次确认）。 */
 export default function NewGame() {
   const navigate = useNavigate();
+  const [params] = useSearchParams();
   const [base, setBase] = useState<Settings>({
     rulesetId: 'tuidaohu',
     difficulty: 'intermediate',
@@ -63,7 +64,8 @@ export default function NewGame() {
       if (still) await repo.finishGame(ongoing.gameId, 'abandoned');
     }
     await repo.saveSettings({ ...base, rulesetId, difficulty, hintEnabled });
-    navigate('/play', { replace: true });
+    // 透传来源查询串（如 E2E 的 ?seed=42）：确定性开局不受配置页往返影响
+    navigate({ pathname: '/play', search: params.toString() }, { replace: true, state: { autostart: true } });
   };
 
   return (
@@ -114,9 +116,12 @@ export default function NewGame() {
         </div>
 
         <div className="new-game-actions">
-          <button data-testid="new-game-back" onClick={() => navigate('/play')}>
-            返回
-          </button>
+          {/* 返回仅在放弃进行中对局的场景有意义；首次进入（无对局可反悔）不显示 */}
+          {ongoing && (
+            <button data-testid="new-game-back" onClick={() => navigate('/play')}>
+              返回
+            </button>
+          )}
           <button className="primary" data-testid="new-game-confirm" disabled={starting} onClick={() => void confirm()}>
             {starting ? '正在开局…' : '开始对局'}
           </button>
