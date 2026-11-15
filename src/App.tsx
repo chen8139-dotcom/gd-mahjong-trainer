@@ -5,6 +5,7 @@ import FirstRun from './ui/pages/FirstRun';
 import Home from './ui/pages/Home';
 import Play from './ui/pages/Play';
 import Learn from './ui/pages/Learn';
+import NewGame from './ui/pages/NewGame';
 import SettingsPage from './ui/pages/Settings';
 import { getRepository } from './app/store';
 
@@ -65,6 +66,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/play" element={<Play />} />
+          <Route path="/play/new" element={<NewGame />} />
           <Route path="/calculator" element={<Calculator />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/settings" element={<SettingsPage />} />
