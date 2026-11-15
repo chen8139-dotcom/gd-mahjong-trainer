@@ -1,9 +1,11 @@
 import { test, expect } from '@playwright/test';
 import { completeFirstRun, openPlay } from './helpers';
 
-test('自摸鸡：首启选择后自动跑完一局并正常终局', async ({ page }) => {
-  test.setTimeout(150_000); // 首启 + 完整自动对局
-  await completeFirstRun(page, 'first-run-radio-zimoji');
+test('自摸鸡：设置页选定流派后自动跑完一局并正常终局', async ({ page }) => {
+  test.setTimeout(150_000); // 完整自动对局
+  await completeFirstRun(page);
+  await page.goto('/settings');
+  await page.getByTestId('settings-ruleset').selectOption('zimoji');
   await openPlay(page, '?seed=42&auto=1');
   await expect(page.getByTestId('result-panel')).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId('score-deltas')).toBeVisible();

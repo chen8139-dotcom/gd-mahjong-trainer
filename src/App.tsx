@@ -1,13 +1,10 @@
-import { useEffect, useState } from 'react';
 import { NavLink, Route, Routes } from 'react-router-dom';
 import Calculator from './ui/pages/Calculator';
-import FirstRun from './ui/pages/FirstRun';
 import Home from './ui/pages/Home';
 import Play from './ui/pages/Play';
 import Learn from './ui/pages/Learn';
 import NewGame from './ui/pages/NewGame';
 import SettingsPage from './ui/pages/Settings';
-import { getRepository } from './app/store';
 
 interface TabDef {
   to: string;
@@ -35,31 +32,7 @@ function renderTab(t: TabDef) {
 }
 
 export default function App() {
-  // 首次启动检测：无设置 → 引导页（SC-5）
-  const [settingsLoaded, setSettingsLoaded] = useState<boolean | null>(null);
-  const [firstRun, setFirstRun] = useState(false);
-
-  useEffect(() => {
-    void (async () => {
-      const s = await getRepository().then((r) => r.getSettings());
-      if (s === null) {
-        setFirstRun(true);
-      }
-      setSettingsLoaded(true);
-    })();
-  }, []);
-
-  if (settingsLoaded === null) return <div className="page">加载中…</div>;
-  if (firstRun) {
-    return (
-      <FirstRun
-        onDone={() => {
-          setFirstRun(false);
-        }}
-      />
-    );
-  }
-
+  // 无首启引导：新用户直接进入首页，规则集等设置均走各页面的默认值（可在设置中修改）
   return (
     <div className="app">
       <main className="app-main">

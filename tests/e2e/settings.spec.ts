@@ -2,12 +2,8 @@ import { test, expect } from '@playwright/test';
 import { completeFirstRun, expectAppReady } from './helpers';
 import fs from 'node:fs';
 
-test('首启选择持久化；设置页换流派与难度；导出→清→导入一致（SC-5、SC-9）', async ({ page }) => {
-  await completeFirstRun(page, 'first-run-radio-jipinghu');
-
-  // 首启选择持久化：刷新后不再出现引导（先等 App 完成设置判定）
-  await page.reload();
-  await expectAppReady(page);
+test('设置页换流派与难度；导出→清→导入一致（SC-9）', async ({ page }) => {
+  await completeFirstRun(page);
 
   // 设置页换流派与难度
   await page.goto('/settings');
@@ -22,12 +18,10 @@ test('首启选择持久化；设置页换流派与难度；导出→清→导�
   const backup = await download.path().then((p) => fs.readFileSync(p!, 'utf-8'));
   expect(JSON.parse(backup).v).toBe(1);
 
-  // 清空存储（模拟清缓存）→ 重新出现首启引导
+  // 清空存储（模拟清缓存）→ 应用仍直接进入首页（首启引导已移除，无设置走各页默认值）
   await page.evaluate(() => indexedDB.deleteDatabase('gd-mahjong-trainer'));
   await page.reload();
-  await expect(page.getByTestId('first-run')).toBeVisible();
-  await page.getByTestId('first-run-confirm').click();
-  await expect(page.getByTestId('first-run')).toHaveCount(0); // 等待设置写入完成
+  await expectAppReady(page);
 
   // 导入备份 → 数据恢复（直接对隐藏 input 设置文件，不点按钮避免原生文件对话框）
   await page.goto('/settings');
