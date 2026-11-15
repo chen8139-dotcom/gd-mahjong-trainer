@@ -13,6 +13,12 @@ export interface DiscardEval {
   ukeireTiles: number; // 使向听下降的摸牌总剩余张数
 }
 
+/** 带受入明细的弃牌评估（计算器展示用）：每张候选都算，非仅最优向听类 */
+export interface DiscardEvalDetail extends DiscardEval {
+  /** 使向听下降的摸牌种与剩余张数，按剩余张数降序 */
+  ukeireDetail: { tile: TileId; remaining: number }[];
+}
+
 const SHANTEN_CACHE_LIMIT = 300_000;
 const shantenCache = new Map<string, number>();
 
@@ -75,6 +81,58 @@ export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] 
     seen[t]++;
     hand[t]++;
     for (const r of group) r.ukeireTiles = ukeire;
+  }
+  return results;
+}
+
+/** 计算器向听分析用：对每张弃牌候选（打出结果等价类去重）都给出向听与受入明细。
+ *  与 evalDiscards 同口径（seen 计含自己暗牌；打出张从 seen 里同样扣减）。 */
+export function evalDiscardsAll(view: PlayerView, ruleset: Ruleset): DiscardEvalDetail[] {
+  const hand = toCounts(view.hand);
+  const meldedSets = view.melds[view.seat].length;
+  const seen = view.seenCounts.slice();
+
+  // 打出后暗牌向量相同的候选共用一次计算（等价类，如拆对子任意一张）
+  const classes = new Map<string, DiscardEvalDetail[]>();
+  const results: DiscardEvalDetail[] = [];
+  for (let t = 0; t < 34; t++) {
+    if (hand[t] === 0) continue;
+    hand[t]--;
+    const shantenAfter = cachedShanten(hand, meldedSets, ruleset);
+    const sig = hand.join(',');
+    hand[t]++;
+    const item: DiscardEvalDetail = { tile: indexToTileId(t), shantenAfter, ukeireTiles: 0, ukeireDetail: [] };
+    const group = classes.get(sig);
+    if (group) group.push(item);
+    else {
+      classes.set(sig, [item]);
+      results.push(item);
+    }
+  }
+
+  for (const group of classes.values()) {
+    const rep = group[0];
+    const t = tileIdToIndex(rep.tile);
+    hand[t]--;
+    seen[t]--; // 已打出，不再计入已见（同 evalDiscards 口径）
+    const detail: { tile: TileId; remaining: number }[] = [];
+    let ukeire = 0;
+    for (let d = 0; d < 34; d++) {
+      const avail = 4 - seen[d];
+      if (avail <= 0) continue;
+      hand[d]++;
+      if (cachedShanten(hand, meldedSets, ruleset) < rep.shantenAfter) {
+        ukeire += avail;
+        detail.push({ tile: indexToTileId(d), remaining: avail });
+      }
+      hand[d]--;
+    }
+    seen[t]++;
+    hand[t]++;
+    for (const r of group) {
+      r.ukeireTiles = ukeire;
+      r.ukeireDetail = detail;
+    }
   }
   return results;
 }

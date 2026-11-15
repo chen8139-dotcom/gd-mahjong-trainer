@@ -67,6 +67,34 @@ test('从当前对局加载：手牌/已见与牌桌一致并直接出听牌结�
   await expect(page.getByTestId('hand-tray').locator('.tile-face')).toHaveCount(13);
   await expect(page.getByTestId('seen-tray').locator('.tile-face').first()).toBeVisible();
 
-  // 摆满即出计算结论（这手牌是否已听牌取决于 seed，两种文案都算成功）
-  await expect(page.getByTestId('calc-result')).toContainText(/共听|暂无听牌/);
+  // 摆满即出计算结论：听牌走共听面板，未听牌走向听面板（取决于这手牌）
+  await expect(page.getByTestId('calc-result')).toContainText(/共听|向听/);
+  // 胜率估算卡片就绪（模拟耗时 ~40s，e2e 不实际点击）
+  await expect(page.getByTestId('calc-sim-run')).toBeEnabled();
+});
+
+test('胜率估算：手动摆牌跑完 100 局模拟并出五格分布', async ({ page }) => {
+  test.setTimeout(150_000); // 模拟 ~40s + 余量
+  await completeFirstRun(page);
+  await page.goto('/calculator');
+  await expect(page.getByTestId('tile-picker')).toBeVisible();
+
+  for (const t of HAND13) {
+    await page.getByTestId(`pick-${t}`).click();
+  }
+  await page.getByTestId('calc-sim-run').click();
+
+  // 进度出现并最终完成
+  await expect(page.getByTestId('calc-sim-progress')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('calc-sim-result')).toBeVisible({ timeout: 120_000 });
+
+  // 五格百分比归一（整数舍入允许 ±1 容差）、note 含局数与近似提示
+  const cells = await page.getByTestId('calc-sim-result').locator('.sim-cell strong').allTextContents();
+  expect(cells).toHaveLength(5);
+  const sum = cells.reduce((acc, c) => acc + Number.parseInt(c, 10), 0);
+  expect(sum).toBeGreaterThanOrEqual(99);
+  expect(sum).toBeLessThanOrEqual(101);
+  await expect(page.getByTestId('calc-sim-note')).toContainText('100 局');
+  // 「再模拟一次」可重跑
+  await expect(page.getByTestId('calc-sim-rerun')).toBeVisible();
 });

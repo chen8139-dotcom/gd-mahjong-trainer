@@ -32,6 +32,10 @@ export interface CalcPreset {
   rulesetId: string;
   /** 来源提示，如「推倒胡 · 第 3 巡 · 余 62 张」 */
   note: string;
+  /** 各家弃牌真实归属（胜率模拟用它还原他家弃牌池证据）；手动摆牌无此信息 */
+  discards?: TileId[][];
+  /** 他家副露（seats 1-3）；手动摆牌无此信息 */
+  oppMelds?: MeldRef[][];
 }
 
 /** 对局状态 → 计算器预置。口径与 calc-service 一致：seen 只放「他家可见信息」
@@ -56,5 +60,7 @@ export function gameToCalcPreset(state: GameState): CalcPreset {
     seen,
     rulesetId: state.rulesetId,
     note: `${getRuleset(state.rulesetId).name} · 第 ${state.discardCount} 巡 · 余 ${state.wall.length} 张`,
+    discards: state.discards.map((d) => [...d]),
+    oppMelds: [1, 2, 3].map((s) => state.melds[s].map((m) => ({ ...m, tiles: [...m.tiles] }))),
   };
 }

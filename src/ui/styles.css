@@ -92,6 +92,17 @@ button.tile-face:disabled { opacity: 0.4; cursor: default; }
 .calc-hint { color: #c0392b; font-size: 13px; margin: 8px 0 0; }
 .calc-error { color: #c0392b; }
 .load-note { margin: 4px 0 0; }
+.shanten-panel { margin-top: 4px; }
+.shanten-head { font-weight: 600; margin: 2px 0 4px; }
+.sim-panel { margin-top: 10px; }
+.sim-head { font-weight: 600; margin: 0 0 8px; }
+.sim-grid { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.sim-cell { flex: 1; min-width: 64px; background: var(--paper); border: 1px solid var(--line); border-radius: 8px; padding: 8px; text-align: center; font-size: 13px; }
+.sim-cell strong { display: block; font-size: 18px; color: var(--green); }
+.sim-cell.sim-me { border-color: var(--green); background: rgba(10, 125, 79, 0.06); }
+.sim-bar { height: 6px; background: var(--paper); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.sim-bar-fill { height: 100%; background: var(--green); transition: width 120ms ease; }
+.sim-run { margin-top: 2px; }
 .muted { color: #888; font-size: 12px; }
 .primary { background: var(--green); color: #fff; border: none; border-radius: 6px; padding: 10px 14px; min-height: 44px; font-size: 15px; }
 button { touch-action: manipulation; }
