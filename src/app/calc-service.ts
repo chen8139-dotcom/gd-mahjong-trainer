@@ -6,6 +6,7 @@ import type { FanResult } from '../domain/score';
 import type { MeldRef } from '../domain/agari';
 import { tileIdToIndex, toCounts, type TileId } from '../domain/tiles';
 import { MahjongError } from './game-controller';
+import { validateWildcards } from '../domain/wildcard';
 
 export interface CalcInput {
   /** 暗牌（不含副露），须为 (4 - 副露组数)×3 + 1 张 */
@@ -14,6 +15,8 @@ export interface CalcInput {
   /** 已见牌（不含自己暗牌与副露）：对手弃牌等，用于剩余张数 */
   seen: TileId[];
   rulesetId: string;
+  /** 指定为鬼牌的牌种，最多三种。 */
+  wildcards?: TileId[];
 }
 
 export interface CalcOutput {
@@ -25,6 +28,7 @@ export interface CalcOutput {
 
 export function calculate(input: CalcInput): CalcOutput {
   const ruleset = getRuleset(input.rulesetId);
+  validateWildcards(input.wildcards ?? [], input.rulesetId);
   const handCounts = toCounts(input.hand); // 非法牌（如同牌 5 张）在此显式抛错——UI 即时校验之外的双保险
   const meldedSets = input.melded.length;
   const expected = (4 - meldedSets) * 3 + 1;
@@ -38,12 +42,13 @@ export function calculate(input: CalcInput): CalcOutput {
   for (let i = 0; i < 34; i++) seenCounts[i] += handCounts[i];
   for (const m of input.melded) for (const t of m.tiles) seenCounts[tileIdToIndex(t)]++;
 
-  const waits = listWaits(handCounts, meldedSets, seenCounts, ruleset);
+  const waits = listWaits(handCounts, meldedSets, seenCounts, ruleset, input.wildcards);
   const fans = waits.map((w) => {
     const counts = handCounts.slice();
     counts[tileIdToIndex(w.tile)]++;
     const fan = canWin(counts, {
       ruleset,
+      wildcards: input.wildcards,
       melded: input.melded,
       // 仅自摸流派的普通听牌以自摸估番；旧流派保留原来的荣胡口径。
       selfDraw: !!ruleset.selfDrawOnly,

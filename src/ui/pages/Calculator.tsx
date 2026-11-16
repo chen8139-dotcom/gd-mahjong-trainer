@@ -6,7 +6,8 @@ import { DEFAULT_HORIZON_WALL, type SimTally } from '../../app/winrate';
 import { getRepository } from '../../app/store';
 import { DEFAULT_SETTINGS } from '../../data/repository';
 import { BUILTIN_RULESETS } from '../../domain/rulesets';
-import { tileIdToIndex, type TileId } from '../../domain/tiles';
+import { tileIdToIndex, tileName, tileNames, type TileId } from '../../domain/tiles';
+import { wildcardMeldChoices } from '../../domain/wildcard-meld';
 import type { MeldRef } from '../../domain/agari';
 import TileFace from '../components/TileFace';
 import TilePicker from '../components/TilePicker';
@@ -18,7 +19,9 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
   const [hand, setHand] = useState<TileId[]>([]);
   const [seen, setSeen] = useState<TileId[]>([]);
   const [melds, setMelds] = useState<MeldRef[]>([]);
-  const [mode, setMode] = useState<'hand' | 'seen' | 'meld'>('hand');
+  const [wildcards, setWildcards] = useState<TileId[]>([]);
+  const [meldTarget, setMeldTarget] = useState<TileId | null>(null);
+  const [mode, setMode] = useState<'hand' | 'seen' | 'meld' | 'wildcard'>('hand');
   // 「从对局加载」的来源提示（成功/无对局/失败），下一次加载覆盖
   const [loadNote, setLoadNote] = useState<string | null>(null);
   // 是否存在进行中的对局：null = 查询中（按钮暂灰），false = 置灰，true = 可点
@@ -36,6 +39,13 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
     oppMelds?: MeldRef[][];
   } | null>(null);
   const simWorkerRef = useRef<Worker | null>(null);
+
+  // 输入改变后旧的模拟结果和后台运算不再对应当前牌面。
+  useEffect(() => {
+    simWorkerRef.current?.terminate();
+    simWorkerRef.current = null;
+    setSim({ status: 'idle', done: 0, total: 0, tally: null });
+  }, [hand, seen, melds, wildcards, rulesetId]);
 
   const handLimit = FULL_HAND - 3 * melds.length;
 
@@ -56,6 +66,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
 
   const onRulesetChange = (id: string): void => {
     setRulesetId(id);
+    if (id !== 'zimoji') { setWildcards([]); setMode('hand'); }
     getRepository()
       .then(async (repo) => {
         const s = await repo.getSettings();
@@ -84,9 +95,21 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
   }, []);
 
   const pick = (tile: TileId): void => {
+    if (mode === 'wildcard') {
+      if (wildcards.includes(tile) && melds.some((meld) => meld.target && meld.target !== tile && meld.tiles.includes(tile))) {
+        setLoadNote(`「${tileName(tile)}」正在副露中作为鬼牌替代，请先移除该副露。`);
+        return;
+      }
+      setLoadNote(null);
+      setMeldTarget(null);
+      setWildcards((current) => current.includes(tile) ? current.filter((t) => t !== tile) : current.length < 3 ? [...current, tile] : current);
+      return;
+    }
+    setSimAttribution(null);
     if (mode === 'hand' && hand.length < handLimit) setHand([...hand, tile]);
     if (mode === 'seen') setSeen([...seen, tile]);
     if (mode === 'meld' && melds.length < 4) {
+      if (wildcards.length) { setMeldTarget(tile); return; }
       // 同牌再次点击：碰升杠；否则记碰
       const existing = melds.find((m) => m.type === 'peng' && m.tiles[0] === tile);
       if (existing) {
@@ -97,9 +120,11 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
     }
   };
   const removeMeld = (index: number): void => {
+    setSimAttribution(null);
     setMelds(melds.filter((_, i) => i !== index));
   };
   const removeAt = (list: TileId[], setList: (v: TileId[]) => void, index: number): void => {
+    setSimAttribution(null);
     const next = [...list];
     next.splice(index, 1);
     setList(next);
@@ -108,6 +133,8 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
     setHand([]);
     setSeen([]);
     setMelds([]);
+    setWildcards([]);
+    setMeldTarget(null);
     setSimAttribution(null);
     setSim({ status: 'idle', done: 0, total: 0, tally: null });
     simWorkerRef.current?.terminate();
@@ -123,15 +150,13 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
           setLoadNote('当前没有进行中的对局');
           return;
         }
-        if (cur.state.wildcards?.length) {
-          setLoadNote('当前计算器暂不支持从鬼牌对局加载，请在牌桌中查看对局。');
-          return;
-        }
         const preset = gameToCalcPreset(cur.state);
         setRulesetId(preset.rulesetId);
         setHand(preset.hand);
         setMelds(preset.melds);
         setSeen(preset.seen);
+        setWildcards(preset.wildcards ?? []);
+        setMeldTarget(null);
         setMode('hand');
         setSimAttribution({ discards: preset.discards, oppMelds: preset.oppMelds });
         setLoadNote(`已从当前对局加载（${preset.note}）`);
@@ -152,25 +177,31 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
     for (const m of melds) for (const t of m.tiles) c[tileIdToIndex(t)]++;
     return c;
   }, [seen, melds]);
+  const meldChoices = useMemo(() => {
+    if (!meldTarget || !wildcards.length || melds.length >= 4) return [];
+    const available = handCounts.map((count, i) => Math.max(0, 4 - count - seenCounts[i]));
+    return ([3, 4] as const).flatMap((length) => wildcardMeldChoices(available, meldTarget, wildcards, length)
+      .map((tiles) => ({ type: length === 3 ? 'peng' as const : 'mingGang' as const, tiles })));
+  }, [meldTarget, wildcards, melds.length, handCounts, seenCounts]);
 
   const result = useMemo(() => {
     if (hand.length !== handLimit) return null;
     try {
-      return calculate({ hand, melded: melds, seen, rulesetId });
+      return calculate({ hand, melded: melds, seen, rulesetId, wildcards });
     } catch (e) {
       return { error: e instanceof Error ? e.message : '计算失败' };
     }
-  }, [hand, seen, melds, rulesetId, handLimit]);
+  }, [hand, seen, melds, rulesetId, wildcards, handLimit]);
 
   // 向听分析：摆满且未听牌时展示（听牌明细由 waits 面板承载）
   const analysis = useMemo<HandAnalysis | null>(() => {
     if (hand.length !== handLimit) return null;
     try {
-      return analyzeHand({ hand, melded: melds, seen, rulesetId });
+      return analyzeHand({ hand, melded: melds, seen, rulesetId, wildcards });
     } catch {
       return null; // 非法牌型等，结果面板已有错误提示
     }
-  }, [hand, seen, melds, rulesetId, handLimit]);
+  }, [hand, seen, melds, rulesetId, wildcards, handLimit]);
 
   // 胜率估算（蒙特卡洛，Worker 分批）：实测轻量策略 ~374ms/局，100 局 ≈ 37s（进度条可取消）
   const SIM_TRIALS = 100;
@@ -195,7 +226,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
       }
     };
     worker.postMessage({
-      input: { hand, melded: melds, seen, rulesetId, discards: simAttribution?.discards, oppMelds: simAttribution?.oppMelds },
+      input: { hand, melded: melds, seen, rulesetId, wildcards, discards: simAttribution?.discards, oppMelds: simAttribution?.oppMelds },
       options: { trials: SIM_TRIALS, horizonWall: DEFAULT_HORIZON_WALL, seedStart: Date.now() >>> 0 },
       batchSize: SIM_BATCH,
     });
@@ -247,6 +278,15 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
         </button>
         <button
           type="button"
+          className={mode === 'wildcard' ? 'active' : ''}
+          onClick={() => setMode('wildcard')}
+          disabled={rulesetId !== 'zimoji'}
+          data-testid="mode-wildcard"
+        >
+          指定鬼牌 {wildcards.length}/3
+        </button>
+        <button
+          type="button"
           onClick={loadFromGame}
           data-testid="calc-load-game"
           disabled={hasOngoing === false}
@@ -263,7 +303,9 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
           {loadNote}
         </p>
       )}
-      {mode === 'meld' && <p className="muted">点牌面记一副碰（3 张），再点同牌升级为杠；副露每多一组，手牌少摆 3 张。</p>}
+      {mode === 'meld' && !wildcards.length && <p className="muted">点牌面记一副碰（3 张），再点同牌升级为杠；副露每多一组，手牌少摆 3 张。</p>}
+      {mode === 'wildcard' && <p className="muted">点牌面指定或取消鬼牌，最多 3 种；该种牌的四张均为鬼牌。</p>}
+      {mode === 'meld' && wildcards.length > 0 && <p className="muted">先选择碰杠的目标牌，再选择实际使用的牌。</p>}
 
       <TilePicker
         seenCounts={seenCounts}
@@ -271,13 +313,28 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
         handLimit={mode === 'hand' ? handLimit : Number.MAX_SAFE_INTEGER}
         handUsed={mode === 'hand' ? hand.length : 0}
         onSelect={pick}
+        wildcards={wildcards}
+        choosingWildcards={mode === 'wildcard'}
+        choosingMeldTarget={mode === 'meld' && wildcards.length > 0}
       />
+      {mode === 'meld' && meldTarget && wildcards.length > 0 && (
+        <div className="calc-result" data-testid="meld-choices">
+          <p>目标：{tileName(meldTarget)}，选择实际牌面：</p>
+          {meldChoices.length === 0 && <p>剩余牌不足以组成该副露。</p>}
+          {meldChoices.map((choice, index) => (
+            <button key={`${choice.type}-${index}`} type="button" data-testid="meld-choice"
+              onClick={() => { setMelds([...melds, { ...choice, target: meldTarget }]); setMeldTarget(null); }}>
+              {choice.type === 'peng' ? '碰' : '杠'}：{tileNames(choice.tiles)}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div className="tray">
         <span>手牌</span>
         <div className="tray-tiles" data-testid="hand-tray">
           {hand.map((t, i) => (
-            <TileFace key={`${t}-${i}`} tile={t} size="sm" testId={`hand-${t}`} onClick={() => removeAt(hand, setHand, i)} />
+            <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={wildcards.includes(t)} testId={`hand-${t}`} onClick={() => removeAt(hand, setHand, i)} />
           ))}
           {hand.length === 0 && <span className="tray-empty">点击上方牌面摆入 {handLimit} 张</span>}
         </div>
@@ -289,8 +346,9 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
             {melds.map((m, i) => (
               <span key={i} className="meld">
                 {m.tiles.map((t, j) => (
-                  <TileFace key={j} tile={t} size="sm" />
+                  <TileFace key={j} tile={t} size="sm" wildcard={wildcards.includes(t)} />
                 ))}
+                {m.target && <small>当{tileName(m.target)}</small>}
                 <button className="meld-remove" data-testid={`meld-remove-${i}`} onClick={() => removeMeld(i)}>
                   ×
                 </button>
@@ -303,7 +361,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
         <span>已见</span>
         <div className="tray-tiles" data-testid="seen-tray">
           {seen.map((t, i) => (
-            <TileFace key={`${t}-${i}`} tile={t} size="sm" testId={`seen-${t}`} onClick={() => removeAt(seen, setSeen, i)} />
+            <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={wildcards.includes(t)} testId={`seen-${t}`} onClick={() => removeAt(seen, setSeen, i)} />
           ))}
           {seen.length === 0 && <span className="tray-empty">记录对手弃牌等已见信息</span>}
         </div>
@@ -346,7 +404,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
               const fan = result.fans.find((f) => f.tile === w.tile)?.fan;
               return (
                 <div className="wait-row" key={w.tile} data-testid={`calc-wait-${w.tile}`}>
-                  <TileFace tile={w.tile} size="sm" />
+                  <TileFace tile={w.tile} size="sm" wildcard={wildcards.includes(w.tile)} />
                   <span>
                     剩 {w.remaining} 张
                     {fan !== 'cannotWin' && (
@@ -398,7 +456,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
           <div data-testid="calc-sim-result">
             <div className="sim-grid">
               <div className="sim-cell sim-me">
-                <span>我先和</span>
+                <span>我先和份额</span>
                 <strong>{pct(doneTally.wins[0], doneTally.trials)}</strong>
               </div>
               {['南家', '西家', '北家'].map((name, i) => (
@@ -415,7 +473,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
             <p className="muted" data-testid="calc-sim-note">
               {doneTally.trials} 局 · 牌墙剩 {DEFAULT_HORIZON_WALL} 张（约 7 巡）为限 · 和牌局平均第{' '}
               {doneTally.winCount > 0 ? Math.round(doneTally.winTurnSum / doneTally.winCount) : '—'} 巡
-              {simAttribution ? '' : ' · 他家弃牌归属为近似'}
+              {simAttribution ? '' : ' · 他家弃牌归属为近似'} · 多人抢杠时平分该局胜利份额
             </p>
             <button type="button" onClick={startSim} data-testid="calc-sim-rerun">
               再模拟一次

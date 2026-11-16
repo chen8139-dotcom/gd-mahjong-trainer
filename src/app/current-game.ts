@@ -30,6 +30,7 @@ export interface CalcPreset {
   melds: MeldRef[];
   seen: TileId[];
   rulesetId: string;
+  wildcards?: TileId[];
   /** 来源提示，如「推倒胡 · 第 3 巡 · 余 62 张」 */
   note: string;
   /** 各家弃牌真实归属（胜率模拟用它还原他家弃牌池证据）；手动摆牌无此信息 */
@@ -59,6 +60,7 @@ export function gameToCalcPreset(state: GameState): CalcPreset {
     melds,
     seen,
     rulesetId: state.rulesetId,
+    wildcards: [...(state.wildcards ?? [])],
     note: `${getRuleset(state.rulesetId).name} · 第 ${state.discardCount} 巡 · 余 ${state.wall.length} 张`,
     discards: state.discards.map((d) => [...d]),
     oppMelds: [1, 2, 3].map((s) => state.melds[s].map((m) => ({ ...m, tiles: [...m.tiles] }))),

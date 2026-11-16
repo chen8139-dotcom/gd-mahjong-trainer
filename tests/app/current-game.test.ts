@@ -33,6 +33,16 @@ const peng = (tile: TileId): MeldRef => ({ type: 'peng', tiles: [tile, tile, til
 const mingGang = (tile: TileId): MeldRef => ({ type: 'mingGang', tiles: [tile, tile, tile, tile] });
 
 describe('gameToCalcPreset：对局状态 → 计算器预置', () => {
+  it('保留鬼牌牌种和双方百搭副露的目标及真实牌面', () => {
+    const own: MeldRef = { type: 'peng', target: 'm7', tiles: ['m7', 'm7', 'p3'] };
+    const opponent: MeldRef = { type: 'mingGang', target: 's9', tiles: ['s9', 's9', 'z7', 'z7'] };
+    const state = makeState({ rulesetId: 'zimoji', wildcards: ['p3', 'z7'], melds: [[own], [opponent], [], []] });
+    const preset = gameToCalcPreset(state);
+    expect(preset.wildcards).toEqual(['p3', 'z7']);
+    expect(preset.melds).toEqual([own]);
+    expect(preset.oppMelds?.[0]).toEqual([opponent]);
+    expect(preset.seen).toEqual(opponent.tiles);
+  });
   it('我方行动回合：暗牌 14 张去掉刚摸的张，得到 13 张手牌', () => {
     const drawn: TileId = 'z1';
     const hand13: TileId[] = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'p1', 'p2', 'p3', 'p4'];

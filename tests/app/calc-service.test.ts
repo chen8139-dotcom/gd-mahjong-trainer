@@ -5,6 +5,23 @@ import { toCounts, fromCounts, type TileId } from '../../src/domain/tiles';
 import { performance } from 'node:perf_hooks';
 
 describe('calculate 计算服务', () => {
+  it('鬼牌参与听牌和番数计算，保留实际牌种', () => {
+    const out = calculate({ hand: ['m1','m2','z7','m4','m5','m6','p1','p2','p3','s1','s2','s3','z1'],
+      melded: [], seen: [], rulesetId: 'zimoji', wildcards: ['z7'] });
+    const fan = out.fans.find((item) => item.tile === 'z1')?.fan;
+    expect(fan).toBeTruthy();
+    expect(fan).not.toBe('cannotWin');
+    if (fan && fan !== 'cannotWin') expect(fan.wildcardAs).toEqual(['m3']);
+    expect(() => calculate({ hand: [], melded: [], seen: [], rulesetId: 'zimoji', wildcards: ['z7', 'z7'] })).toThrow('鬼牌');
+  });
+  it('百搭副露按逻辑目标计番而按真实牌面扣减张数', () => {
+    const out = calculate({ hand: ['m1','m2','m3','m4','m5','m6','m7','m8','m9','m9'],
+      melded: [{ type: 'peng', target: 'm7', tiles: ['m7','m7','p3'] }], seen: [], rulesetId: 'zimoji', wildcards: ['p3'] });
+    const fan = out.fans.find((item) => item.tile === 'm9')?.fan;
+    expect(fan).toBeTruthy();
+    if (!fan || fan === 'cannotWin') throw new Error('未得到胡牌番数');
+    expect(fan.matched.some((y) => y.yakuId === 'qingyise')).toBe(true);
+  });
   it('自摸鸡听牌按自摸计番并满足起胡', () => {
     const out = calculate({
       hand: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'p1', 'p2', 'z5', 'z5'],

@@ -8,25 +8,32 @@ export default function TilePicker({
   handLimit,
   handUsed,
   onSelect,
+  wildcards,
+  choosingWildcards = false,
+  choosingMeldTarget = false,
 }: {
   seenCounts: number[]; // 已见（不含手中）
   handCounts: number[]; // 手中各牌张数
   handLimit: number;
   handUsed: number;
   onSelect: (tile: TileId) => void;
+  wildcards?: TileId[];
+  choosingWildcards?: boolean;
+  choosingMeldTarget?: boolean;
 }) {
   return (
     <div className="tile-picker" data-testid="tile-picker">
       {ALL_INDICES.map((i) => {
         const tile = indexToTileId(i);
         const remaining = 4 - seenCounts[i] - handCounts[i];
-        const disabled = remaining <= 0 || handUsed >= handLimit;
+        const disabled = choosingWildcards ? !(wildcards?.includes(tile)) && (wildcards?.length ?? 0) >= 3 : choosingMeldTarget ? false : remaining <= 0 || handUsed >= handLimit;
         return (
           <TileFace
             key={tile}
             tile={tile}
             size="sm"
-            badge={remaining}
+            badge={choosingWildcards ? undefined : remaining}
+            wildcard={wildcards?.includes(tile)}
             disabled={disabled}
             testId={`pick-${tile}`}
             onClick={() => {

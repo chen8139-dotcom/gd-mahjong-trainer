@@ -2,6 +2,14 @@
 // 允许同一逻辑牌超过四张；七对必须为七个不同对子。
 import { indexToTileId, tileIdToIndex, type TileId } from './tiles';
 
+/** 校验公开输入中的鬼牌牌种，避免重复或非法设置。 */
+export function validateWildcards(wildcards: readonly TileId[], rulesetId: string): void {
+  if (wildcards.length > 3 || new Set(wildcards).size !== wildcards.length || (wildcards.length > 0 && rulesetId !== 'zimoji') ||
+      wildcards.some((tile) => typeof tile !== 'string' || !/^(?:[mps][1-9]|z[1-7])$/.test(tile))) {
+    throw new Error('鬼牌须为自摸鸡中的 0 至 3 种不同牌');
+  }
+}
+
 /** 判断暗牌能否组成标准形或七对；meldedSets 为已副露面子数。 */
 export function wildcardShape(
   hand: number[],

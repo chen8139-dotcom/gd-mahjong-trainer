@@ -6,6 +6,7 @@ import { getRuleset } from '../domain/rulesets';
 import { tileIdToIndex, toCounts, type TileId } from '../domain/tiles';
 import type { MeldRef } from '../domain/agari';
 import type { PlayerView } from '../domain/game-types';
+import { validateWildcards } from '../domain/wildcard';
 
 export interface CalcAnalysisInput {
   hand: TileId[];
@@ -13,6 +14,7 @@ export interface CalcAnalysisInput {
   /** 已见牌（不含自己暗牌与副露），受入剩余张数按此扣减 */
   seen: TileId[];
   rulesetId: string;
+  wildcards?: TileId[];
 }
 
 export interface HandAnalysis {
@@ -24,6 +26,7 @@ export interface HandAnalysis {
 
 export function analyzeHand(input: CalcAnalysisInput): HandAnalysis {
   const ruleset = getRuleset(input.rulesetId);
+  validateWildcards(input.wildcards ?? [], input.rulesetId);
   const handCounts = toCounts(input.hand);
   // 已见口径与 calc-service 一致：对手弃牌 + 自己暗牌 + 全部副露
   const seenCounts = new Array<number>(34).fill(0);
@@ -42,8 +45,9 @@ export function analyzeHand(input: CalcAnalysisInput): HandAnalysis {
     wallCount: 0,
     dealer: 0,
     rulesetId: input.rulesetId,
+    wildcards: input.wildcards,
   };
-  const shanten = shantenOf(handCounts, input.melded.length, ruleset);
+  const shanten = shantenOf(handCounts, input.melded.length, ruleset, input.wildcards);
   const candidates = evalDiscardsAll(view, ruleset);
   candidates.sort((a, b) => a.shantenAfter - b.shantenAfter || b.ukeireTiles - a.ukeireTiles);
   return { shanten, candidates };

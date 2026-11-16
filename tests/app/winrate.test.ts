@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { assertTileConservation } from '../../src/app/game-controller';
-import { buildSimState, DEFAULT_HORIZON_WALL, mergeTally, simulateBatch } from '../../src/app/winrate';
+import { buildSimState, DEFAULT_HORIZON_WALL, mergeTally, simulateBatch, winShares } from '../../src/app/winrate';
 import { mulberry32 } from '../../src/domain/rng';
 import { parseHandShorthand, type TileId } from '../../src/domain/tiles';
 import type { MeldRef } from '../../src/domain/agari';
@@ -25,6 +25,16 @@ const INPUT = {
 };
 
 describe('buildSimState', () => {
+  it('保留鬼牌与对手杠牌的实际数量及逻辑目标', () => {
+    const input = { ...INPUT, rulesetId: 'zimoji', wildcards: ['z7'],
+      seen: [...INPUT.seen, 'z1', 'z1', 'z7', 'z7'],
+      oppMelds: [[{ type: 'mingGang' as const, target: 'z1', tiles: ['z1', 'z1', 'z7', 'z7'] }], [], []] };
+    const state = buildSimState(input, mulberry32(2));
+    expect(state.wildcards).toEqual(['z7']);
+    expect(state.melds[1][0].target).toBe('z1');
+    expect(state.hands[1].reduce((a, b) => a + b, 0)).toBe(10);
+    assertTileConservation(state);
+  });
   it('合成状态满足 136 张守恒，且我方暗牌 + 摸牌 = 14', () => {
     const state = buildSimState(INPUT, mulberry32(1));
     assertTileConservation(state);
@@ -57,6 +67,16 @@ describe('buildSimState', () => {
 });
 
 describe('simulateBatch', () => {
+  it('多人抢杠平分一次胜利，单赢家和流局兼容', () => {
+    const fan = { total: 2, capped: false, form: 'standard' as const, matched: [] };
+    const base = { type: 'win' as const, winner: 0, winTile: 'z1', selfDraw: false, fan, deltas: [2, -4, 2, 0] };
+    expect(winShares({ ...base, winners: [{ seat: 0, fan }, { seat: 2, fan }] })).toEqual([0.5, 0, 0.5, 0]);
+    const shares = winShares({ ...base, winners: [{ seat: 0, fan }, { seat: 2, fan }, { seat: 3, fan }] });
+    expect(shares[0]).toBeCloseTo(1 / 3);
+    expect(shares.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1);
+    expect(winShares(base)).toEqual([1, 0, 0, 0]);
+    expect(winShares({ ...base, type: 'draw', winner: null, fan: null })).toEqual([0, 0, 0, 0]);
+  });
   it('同 seed 完全可复现', () => {
     const a = simulateBatch(INPUT, { trials: 6, horizonWall: DEFAULT_HORIZON_WALL, seedStart: 20260101 });
     const b = simulateBatch(INPUT, { trials: 6, horizonWall: DEFAULT_HORIZON_WALL, seedStart: 20260101 });
@@ -78,6 +98,20 @@ describe('simulateBatch', () => {
     expect(t.undecided).toBe(5);
     expect(t.winCount).toBe(0);
   });
+
+  it('鬼牌局模拟能复用当前牌种并保持份额归一', () => {
+    const input = { ...INPUT, rulesetId: 'zimoji', wildcards: ['z7', 'm4'] };
+    const tally = simulateBatch(input, { trials: 2, horizonWall: 75, seedStart: 10 });
+    expect(tally.trials).toBe(2);
+    expect(tally.wins.reduce((sum, n) => sum + n, 0) + tally.undecided).toBeCloseTo(2);
+  }, 120_000);
+
+  it('鬼牌局可模拟至默认牌墙界限', () => {
+    const input = { ...INPUT, rulesetId: 'zimoji', wildcards: ['z7'] };
+    const tally = simulateBatch(input, { trials: 3, horizonWall: DEFAULT_HORIZON_WALL, seedStart: 23 });
+    expect(tally.trials).toBe(3);
+    expect(tally.wins.reduce((sum, n) => sum + n, 0) + tally.undecided).toBeCloseTo(3);
+  }, 120_000);
 
   it('mergeTally 合并正确', () => {
     const a = simulateBatch(INPUT, { trials: 5, horizonWall: 70, seedStart: 11 });
