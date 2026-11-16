@@ -2,10 +2,16 @@ import { test, expect } from '@playwright/test';
 import { completeFirstRun, openPlay } from './helpers';
 
 test('陪练：自动演示模式完整打完一局并看到结算与复盘（SC-4 桌面部分）', async ({ page }) => {
+  test.setTimeout(90_000); // 自摸鸡只能自摸胡 + 抢杠宣称窗，单局常超 20s
   await completeFirstRun(page);
   await openPlay(page, '?seed=42&auto=1');
   await expect(page.getByTestId('result-panel')).toBeVisible({ timeout: 120_000 });
   await expect(page.getByTestId('score-deltas')).toBeVisible();
+  // 结算面板展示四家手牌：四行、胡家带「· 胡」标记
+  const resultHands = page.getByTestId('result-hands');
+  await expect(resultHands).toBeVisible();
+  await expect(resultHands.locator('.result-hand-row')).toHaveCount(4);
+  await expect(resultHands).toContainText('· 胡');
   await expect(page.getByTestId('divergence-list')).toBeVisible();
   await page.getByTestId('new-game').click();
   await expect(page.getByTestId('result-panel')).not.toBeVisible();

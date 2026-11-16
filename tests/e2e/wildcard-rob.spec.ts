@@ -93,4 +93,7 @@ test('鬼牌碰牌：牌桌提供不同实体牌组合并保留鬼牌标识', as
   const meld = page.getByTestId('seat-0').locator('.meld');
   await expect(meld.locator('.tile-wildcard')).toHaveCount(2);
   await expect(meld).toContainText('鬼');
+  await expect(page.getByText('碰牌后请先打出一张牌')).toBeVisible();
+  await expect(page.getByTestId('btn-win')).toHaveCount(0);
+  await expect(page.locator('[data-testid^="btn-angang-"], [data-testid^="btn-bugang-"]')).toHaveCount(0);
 });

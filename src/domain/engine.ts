@@ -67,6 +67,10 @@ export function legalActions(
   const handCounts = toCounts(view.hand);
 
   if (view.phase === 'action') {
+    if (view.mustDiscardAfterPeng) {
+      for (let t = 0; t < 34; t++) if (handCounts[t] > 0) actions.push({ type: 'discard', tile: indexToTileId(t) });
+      return actions;
+    }
     // view.hand 在行动阶段已含刚摸的张（3n+2），直接参与自摸胡判定
     if (canWin(handCounts, winCtx(view, ruleset, true, flags))) {
       actions.push({ type: 'win', selfDraw: true });

@@ -117,7 +117,7 @@ function gangDecisionOf(view: PlayerView, ruleset: Ruleset, bestShantenAfter: nu
 function decideDiscard(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset): Decision {
   // 自摸已胡：直接胡（v1 不做默胡策略）
   const flags: WinContext['flags'] = {};
-  if (canWin(toCounts(view.hand), { ruleset, wildcards: view.wildcards, melded: view.melds[view.seat], selfDraw: true, menqing: view.melds[view.seat].length === 0, flags })) {
+  if (!view.mustDiscardAfterPeng && canWin(toCounts(view.hand), { ruleset, wildcards: view.wildcards, melded: view.melds[view.seat], selfDraw: true, menqing: view.melds[view.seat].length === 0, flags })) {
     return {
       action: { type: 'win', selfDraw: true },
       score: 1000,
@@ -137,7 +137,7 @@ function decideDiscard(view: PlayerView, difficulty: Difficulty, ruleset: Rulese
   const best = scored[0];
 
   // W0：暗杠/补杠（保持/改善向听时），优先于出牌
-  const gang = gangDecisionOf(view, ruleset, best.e.shantenAfter, best.score);
+  const gang = view.mustDiscardAfterPeng ? null : gangDecisionOf(view, ruleset, best.e.shantenAfter, best.score);
   if (gang) return gang;
 
   const margin = best.score - (scored[1]?.score ?? 0);

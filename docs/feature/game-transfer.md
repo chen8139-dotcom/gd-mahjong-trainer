@@ -1,6 +1,6 @@
 # 对局导出/导入（跨设备续打与 bug 复现）
 
-> 状态：已实施（2026-11-15）· 目标读者：本项目维护者与测试人员。
+> 状态：本地代码已实施；2026-11-17 核对当前代码，未核查线上部署 · 目标读者：本项目维护者与测试人员。
 > 相关代码：`src/app/game-transfer.ts`（核心）、`src/ui/pages/Play.tsx`（UI）、`tests/app/game-transfer.test.ts`、`tests/e2e/game-transfer.spec.ts`。
 
 ## 1. 背景与目标
@@ -41,6 +41,8 @@ AI 陪练对局此前只能在本机 IndexedDB 内崩溃恢复（resume-dialog�
 3. 结构检查：`hands/melds/discards` 各 4 组、手牌 34 维非负计数（≤4）、牌墙 0-33、副露类型合法、`dealer/turn ∈ 0-3`、phase 合法；
 4. `getRuleset(rulesetId)` 可解析；
 5. `assertTileConservation`（136 张守恒）。
+
+**鬼牌及抢杠**：当前校验包含鬼牌种类、抢杠候选与已选择状态，并核对候选与手牌；旧快照缺少新增字段仍可读取。后台快照可记录宣称中状态，但用户界面的导入/导出按钮仍只在本人行动回合提供，不应表述为可在抢杠宣称时直接点击导出。
 
 **落地**：导入生成**新 gameId**（`crypto.randomUUID()`）→ `createGame(outcome:'ongoing')` → `appendSnapshot` → `setSession`。不污染原局历史，崩溃恢复（resume-dialog）对导入局同样生效。
 

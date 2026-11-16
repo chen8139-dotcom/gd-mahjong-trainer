@@ -12,12 +12,20 @@ for (const count of [0, 1, 2, 3]) {
     await page.getByTestId('new-game-confirm').click();
     await expect(page.getByTestId('play-page')).toBeVisible();
     const text = count ? await page.getByTestId('wildcard-list').innerText() : null;
-    if (count === 0) await expect(page.getByTestId('wildcard-list')).toHaveCount(0);
+    if (count === 0) {
+      await expect(page.getByTestId('wildcard-list')).toHaveCount(0);
+      await expect(page.getByTestId('wildcard-guide-tiles')).toHaveCount(0);
+    } else {
+      await expect(page.getByTestId('wildcard-guide-tiles').locator('.tile-wildcard')).toHaveCount(count);
+    }
     if (text) expect(text.replace('鬼牌：', '').split('·')).toHaveLength(count);
     await page.reload();
     await page.getByTestId('resume-yes').click();
     await expect(page.getByTestId('play-page')).toBeVisible();
-    if (text) await expect(page.getByTestId('wildcard-list')).toHaveText(text);
+    if (text) {
+      await expect(page.getByTestId('wildcard-list')).toHaveText(text);
+      await expect(page.getByTestId('wildcard-guide-tiles').locator('.tile-wildcard')).toHaveCount(count);
+    }
     else await expect(page.getByTestId('wildcard-list')).toHaveCount(0);
   });
 }

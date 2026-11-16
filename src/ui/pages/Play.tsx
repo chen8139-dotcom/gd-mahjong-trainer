@@ -7,9 +7,10 @@ import {
   serializeSnapshot,
   deserializeSnapshot,
   type GameState,
+  type GameResult,
 } from '../../app/game-controller';
 import { legalActions } from '../../domain/engine';
-import { indexToTileId, tileName, tileNames, toCounts, tileIdToIndex } from '../../domain/tiles';
+import { fromCounts, indexToTileId, tileName, tileNames, toCounts, tileIdToIndex } from '../../domain/tiles';
 import { evaluateWin } from '../../domain/score';
 import { evaluateTurn, type Divergence } from '../../app/coach';
 import { getRepository } from '../../app/store';
@@ -42,6 +43,41 @@ function winningPairs(state: GameState, seat: number, substitutions: string[] = 
   if (!state.result?.selfDraw && state.result?.winTile) tiles.push(state.result.winTile);
   const natural = tiles.filter((tile) => !state.wildcards?.includes(tile));
   return [...natural, ...substitutions].sort((a, b) => tileIdToIndex(a) - tileIdToIndex(b));
+}
+
+/** 结算面板「各家手牌」：终局四家暗牌 + 副露全量展示（本地单机无信息不对称）。
+ *  荣胡的胡牌张未入胡家手牌，单列追加；鬼牌种在牌角标注「鬼」。 */
+function ResultHands({ state, result }: { state: GameState; result: GameResult }) {
+  const winners =
+    result.type === 'win'
+      ? result.winners ?? (result.winner !== null && result.fan ? [{ seat: result.winner, fan: result.fan }] : [])
+      : [];
+  const renderTile = (t: string, key: string) => (
+    <TileFace key={key} tile={t} size="sm" badge={state.wildcards?.includes(t) ? '鬼' : undefined} />
+  );
+  return (
+    <div className="result-hands" data-testid="result-hands">
+      <b>各家手牌</b>
+      {[0, 1, 2, 3].map((seat) => {
+        const isWinner = winners.some((w) => w.seat === seat);
+        const hand = fromCounts(state.hands[seat]);
+        // 荣胡的胡牌张仍在弃牌堆语义里，展示时追加到胡家手牌尾部
+        const tiles = isWinner && !result.selfDraw && result.winTile ? [...hand, result.winTile] : hand;
+        return (
+          <div className="result-hand-row" key={seat}>
+            <span className="result-hand-seat">
+              {seatName(seat)}
+              {isWinner && ' · 胡'}
+            </span>
+            <span className="result-hand-tiles">
+              {tiles.map((t, i) => renderTile(t, `h${i}`))}
+              {state.melds[seat].map((m, i) => m.tiles.map((t, j) => renderTile(t, `m${i}-${j}`)))}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 /** 开一圈中的一局并落库：种子/庄家由圈进度决定（整圈可复现）。 */
@@ -471,7 +507,7 @@ export default function Play() {
       if (!('cannotWin' in r) || r.reason !== 'below-starting-fan') return null;
       return { ...r.blocked, rulesetName: rs.name, startingFan: rs.startingFan };
     };
-    if (myTurn) return evalBlocked(toCounts(view.hand), true);
+    if (myTurn) return view.mustDiscardAfterPeng ? null : evalBlocked(toCounts(view.hand), true);
     if (st.phase === 'claims' && st.lastDiscard && st.lastDiscard.from !== HUMAN_SEAT) {
       const counts = toCounts(view.hand);
       counts[tileIdToIndex(st.lastDiscard.tile)]++;
@@ -667,9 +703,6 @@ export default function Play() {
             <span className="muted">
               余 {session.state.wall.length} 张 · 第 {session.state.discardCount} 巡
             </span>
-            {!!session.state.wildcards?.length && (
-              <span data-testid="wildcard-list">鬼牌：{tileNames(session.state.wildcards)}</span>
-            )}
             {myTurn && !autoMode && (
               <span className="wall-tools">
                 <button data-testid="export-game-btn" onClick={openExport}>
@@ -681,6 +714,17 @@ export default function Play() {
               </span>
             )}
           </div>
+          {!!session.state.wildcards?.length && (
+            <div className="wildcard-guide" aria-label={`本局鬼牌：${tileNames(session.state.wildcards)}`}>
+              <div className="wildcard-guide-text">
+                <span className="wildcard-guide-label">本局鬼牌</span>
+                <span data-testid="wildcard-list">鬼牌：{tileNames(session.state.wildcards)}</span>
+              </div>
+              <div className="wildcard-guide-tiles" data-testid="wildcard-guide-tiles" aria-hidden="true">
+                {session.state.wildcards.map((tile) => <TileFace key={tile} tile={tile} size="sm" wildcard />)}
+              </div>
+            </div>
+          )}
         </div>
 
         <SeatPanel state={session.state} seat={2} pos="top" />
@@ -755,7 +799,7 @@ export default function Play() {
                   </button>
                 ),
               )}
-              <span className="muted">点手牌中的牌打出</span>
+              <span className="muted">{view.mustDiscardAfterPeng ? '碰牌后请先打出一张牌' : '点手牌中的牌打出'}</span>
             </div>
           )}
 
@@ -841,6 +885,7 @@ export default function Play() {
                 </p>
               </>
             )}
+            <ResultHands state={session.state} result={result} />
             <table className="score-table" data-testid="score-deltas">
               <thead>
                 <tr>

@@ -58,6 +58,8 @@ export interface GameState {
   wall: number[];
   /** 展示用：刚摸到的牌（计数已含在 hands 中） */
   drawnTile: TileId | null;
+  /** 自摸鸡碰牌后必须先弃牌；缺省兼容旧快照。 */
+  mustDiscardAfterPeng?: boolean;
   lastDiscard: LastDiscard | null;
   /** 抢杠宣称窗（robKong 流派）：补杠暂缓结算，该牌仍持有于 seat 手中（守恒不变），等待他人抢杠或过 */
   pendingBuGang?: { seat: number; tile: TileId; target?: TileId; eligible?: number[]; decisions?: Record<number, 'win' | 'pass'> };
@@ -79,6 +81,15 @@ export class MahjongError extends Error {
 }
 
 const meldTileCount = (m: MeldRef): number => (m.type === 'peng' || m.type === 'chi' ? 3 : 4);
+
+/** 旧快照没有显式标记：自摸鸡行动阶段无摸牌且刚碰出的牌组位于末尾。 */
+export function mustDiscardAfterPeng(state: GameState): boolean {
+  if (state.mustDiscardAfterPeng !== undefined) return state.mustDiscardAfterPeng;
+  if (state.rulesetId !== 'zimoji' || state.phase !== 'action' || state.drawnTile != null || state.lastDiscard || state.pendingBuGang || state.result) return false;
+  const melds = state.melds[state.turn];
+  const hand = state.hands[state.turn];
+  return !!melds && !!hand && melds[melds.length - 1]?.type === 'peng' && hand.reduce((sum, count) => sum + count, 0) === (4 - melds.length) * 3 + 2;
+}
 
 function consumeMeldTiles(s: GameState, seat: number, target: TileId, chosen: TileId[], needed: number): void {
   const choices = wildcardMeldChoices(s.hands[seat], target, s.wildcards ?? [], needed);
@@ -129,6 +140,7 @@ export function newGame(cfg: GameConfig): GameState {
     discards: [[], [], [], []],
     wall,
     drawnTile: dealerDrawn === null ? null : indexToTileId(dealerDrawn),
+    mustDiscardAfterPeng: false,
     lastDiscard: null,
     flags: {},
     result: null,
@@ -139,6 +151,7 @@ export function newGame(cfg: GameConfig): GameState {
 }
 
 function drawTo(s: GameState, seat: number, afterGang: boolean): void {
+  s.mustDiscardAfterPeng = false;
   if (s.wall.length === 0) {
     s.result = { type: 'draw', winner: null, winTile: null, selfDraw: false, fan: null, deltas: [0, 0, 0, 0] };
     s.phase = 'over';
@@ -212,10 +225,14 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
 
   if (s.phase === 'action') {
     if (claimant !== s.turn) throw new MahjongError('NOT_YOUR_TURN', `轮到座位 ${s.turn}`);
+    if (mustDiscardAfterPeng(s) && action.type !== 'discard') {
+      throw new MahjongError('MUST_DISCARD', '碰牌后必须先打出一张牌');
+    }
     switch (action.type) {
       case 'discard': {
         const t = tileIdToIndex(action.tile);
         if (s.hands[s.turn][t] <= 0) throw new MahjongError('ILLEGAL_DISCARD', `手中无 ${action.tile}`);
+        s.mustDiscardAfterPeng = false;
         s.hands[s.turn][t]--;
         s.discards[s.turn].push(action.tile);
         s.lastDiscard = { tile: action.tile, from: s.turn };
@@ -356,6 +373,7 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         s.lastDiscard = null;
         s.phase = 'action';
         s.drawnTile = null;
+        if (s.rulesetId === 'zimoji') s.mustDiscardAfterPeng = true;
         break;
       }
       case 'mingGang': {
@@ -424,6 +442,7 @@ export function playerView(state: GameState, seat: number): PlayerView {
     pendingBuGang: state.pendingBuGang ? { ...state.pendingBuGang } : undefined,
     rulesetId: state.rulesetId,
     wildcards: state.wildcards ?? [],
+    mustDiscardAfterPeng: seat === state.turn && mustDiscardAfterPeng(state),
   };
 }
 

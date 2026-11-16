@@ -38,4 +38,6 @@ export interface PlayerView {
   rulesetId: string;
   /** 本局公开的鬼牌牌种。 */
   wildcards?: TileId[];
+  /** 当前玩家碰牌后必须先弃牌。 */
+  mustDiscardAfterPeng?: boolean;
 }

@@ -1,5 +1,7 @@
 # 新流派「自摸鸡」开发计划（仅自摸 · 不可吃 · 可碰杠 · 抢杠为唯一荣胡例外）
 
+> **历史记录说明：** 2026-11-17 现状：本文为原始设计记录，当前新对局仅自摸鸡；鬼牌与多人抢杠扩展以 [鬼牌 PRD](./zimoji-wildcard-prd.md) 为准，AI 已知问题见 [修复计划](./ai-zimoji-wildcard-fixes.md)。下文历史版本、单赢家宣称流程和原测试清单不作为当前实现说明。
+
 > 状态：**已实施**（main @ e51ad8f，2026-11-15）——本文件保留为设计决策记录；AI 侧适配（伪守势修复、档位塌缩、基线对打）见 `ai-tier2-zimoji.md`。原计划要点：抢杠荣胡为仅自摸的唯一例外，引擎新增抢杠宣称窗（`buGang` 有候选抢者时进窗）；已拍板：起胡番数 2（§2.4）、抢杠荣胡例外（§3）。
 > 负责人：待定 · 目标读者：本项目维护者。
 > 前置阅读：`src/domain/rulesets/types.ts`、`src/domain/engine.ts`（legalActions）、`src/app/game-controller.ts`（applyAction / autoStep）、`src/app/game-transfer.ts`（快照导入）、`docs/feature/`（本目录）。

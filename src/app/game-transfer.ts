@@ -155,6 +155,17 @@ export function importGame(json: string): GameState {
   ) {
     throw new MahjongError('BAD_EXPORT', '对局状态字段非法（流派/庄家/回合/阶段）');
   }
+  if (st.mustDiscardAfterPeng !== undefined) {
+    if (typeof st.mustDiscardAfterPeng !== 'boolean') throw new MahjongError('BAD_EXPORT', '碰牌后出牌状态非法');
+    if (st.mustDiscardAfterPeng) {
+      const melds = st.melds[st.turn];
+      const handSize = st.hands[st.turn].reduce((sum, count) => sum + count, 0);
+      if (st.rulesetId !== 'zimoji' || st.phase !== 'action' || st.drawnTile != null || st.lastDiscard || st.pendingBuGang || st.result ||
+          melds[melds.length - 1]?.type !== 'peng' || handSize !== (4 - melds.length) * 3 + 2) {
+        throw new MahjongError('BAD_EXPORT', '碰牌后出牌状态与局面不符');
+      }
+    }
+  }
   if (st.pendingBuGang !== undefined) {
     const pb = st.pendingBuGang;
     if (typeof pb !== 'object' || pb === null || !Number.isInteger(pb.seat) || pb.seat < 0 || pb.seat > 3 || typeof pb.tile !== 'string') {

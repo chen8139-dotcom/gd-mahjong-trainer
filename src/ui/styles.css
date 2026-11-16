@@ -430,6 +430,12 @@ button { touch-action: manipulation; }
   border-radius: 12px; padding: 2px 10px; font-size: 12px;
 }
 .fan-chip.total { background: var(--green); border-color: var(--green); color: #fff; font-weight: 700; }
+/* 结算面板各家手牌：四家暗牌 + 副露全量展示（荣胡的胡牌张追加在胡家尾部） */
+.result-hands { margin: 10px 0 4px; }
+.result-hands > b { display: block; font-size: 13px; color: #145238; margin-bottom: 4px; }
+.result-hand-row { display: flex; align-items: flex-start; gap: 8px; margin: 6px 0; }
+.result-hand-seat { flex: 0 0 78px; font-size: 12px; color: #44614f; padding-top: 13px; white-space: nowrap; }
+.result-hand-tiles { display: flex; flex-wrap: wrap; gap: 3px; align-items: flex-end; min-width: 0; }
 .score-table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .score-table th, .score-table td { border-bottom: 1px solid var(--line); padding: 5px 4px; text-align: left; font-size: 13px; }
 .score-table th { color: #888; font-weight: 500; }
@@ -452,6 +458,14 @@ button { touch-action: manipulation; }
 .wall-round { color: #ffd97a; font-weight: 700; font-size: 13px; letter-spacing: 2px; }
 .wall-progress { flex: 1; height: 6px; background: rgba(0, 0, 0, 0.35); border-radius: 3px; overflow: hidden; }
 .wall-progress-fill { height: 100%; background: linear-gradient(90deg, #ffd97a, #f0b95a); border-radius: 3px; transition: width 0.3s; }
+.wildcard-guide {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  margin: 0 4px 5px; padding: 5px 10px; border: 1px solid rgba(255, 211, 117, .55);
+  border-radius: 9px; background: rgba(61, 39, 13, .78); color: #fff1c8;
+}
+.wildcard-guide-text { display: flex; flex-direction: column; gap: 3px; font-size: 13px; }
+.wildcard-guide-label { color: #ffd97a; font-weight: 700; letter-spacing: 1px; }
+.wildcard-guide-tiles { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 
 /* 对局导出/导入 */
 .wall-tools { display: flex; gap: 6px; }
