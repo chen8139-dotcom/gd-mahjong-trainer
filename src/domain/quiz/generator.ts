@@ -42,7 +42,7 @@ function toShorthand(ids: TileId[]): string {
 
 
 /** 出一道「打哪张」随机练习题：标准答案与可接受答案均来自同难度 AI 的效率评估 */
-export function generateDiscardQuiz(seed: number, difficulty: Difficulty = 'expert'): QuizQuestion | null {
+function tryGenerateDiscardQuiz(seed: number, difficulty: Difficulty): QuizQuestion | null {
   const rng = (() => {
     let a = seed >>> 0;
     return () => {
@@ -104,6 +104,15 @@ export function generateDiscardQuiz(seed: number, difficulty: Difficulty = 'expe
     acceptable,
     explanation: `AI（${difficulty}）会打 ${bestTile}：${aiReason}。打 ${bestTile} 后向听 ${bestEval.shantenAfter}，有效进张 ${bestEval.ukeireTiles} 张。`,
   };
+}
+
+/** 有些随机手牌的 AI 首选是杠牌，不适合出「打哪张」题；按确定性种子重试。 */
+export function generateDiscardQuiz(seed: number, difficulty: Difficulty = 'expert'): QuizQuestion | null {
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const q = tryGenerateDiscardQuiz((seed + attempt * 7919) >>> 0, difficulty);
+    if (q) return q;
+  }
+  return null;
 }
 
 /** options 与 best 的合法性校验（题库 schema 测试与生成器共用） */

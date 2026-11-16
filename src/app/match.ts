@@ -51,6 +51,7 @@ export function advanceMatch(m: MatchState, gameId: string, result: GameResult):
     type: result.type,
     winner: result.winner,
     ...(result.winners ? { winners: result.winners.map((winner) => winner.seat) } : {}),
+    ...(result.winners ? { winnerFans: result.winners.map((winner) => ({ seat: winner.seat, fanTotal: winner.fan.total })) } : {}),
     selfDraw: result.selfDraw,
     fanTotal: result.fan?.total ?? null,
     deltas: [...result.deltas],

@@ -48,7 +48,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/play" element={<Play key={location.key} />} />
-          <Route path="/play/new" element={<NewGame />} />
+          <Route path="/play/new" element={<NewGame wildcardEnabled />} />
           <Route path="/calculator" element={<Calculator />} />
           <Route path="/learn" element={<Learn />} />
           <Route path="/settings" element={<SettingsPage />} />

@@ -34,6 +34,8 @@ export interface GameResult {
   fan: FanResult | null;
   /** 多家抢杠时逐家记录；旧对局没有该字段。 */
   winners?: { seat: number; fan: FanResult }[];
+  /** 荣胡或抢杠时的放牌座位；旧记录可能缺省。 */
+  from?: number;
   /** 四家分数变动（点数，v1 简化：自摸三家各付、点炮者独付） */
   deltas: number[];
 }
@@ -159,7 +161,7 @@ function settleWin(s: GameState, winner: number, fan: FanResult, selfDraw: boole
     deltas[winner] = n;
     deltas[s.lastDiscard!.from] = -n;
   }
-  s.result = { type: 'win', winner, winTile, selfDraw, fan, deltas };
+  s.result = { type: 'win', winner, winTile, selfDraw, fan, deltas, ...(!selfDraw ? { from: s.lastDiscard!.from } : {}) };
   s.phase = 'over';
   s.lastDiscard = null;
   s.drawnTile = null;
@@ -312,7 +314,7 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
           deltas[from] -= winner.fan.total;
         }
         s.flags = { ...s.flags, qiangGang: true };
-        s.result = { type: 'win', winner: winners[0].seat, fan: winners[0].fan, winners,
+        s.result = { type: 'win', winner: winners[0].seat, fan: winners[0].fan, winners, from,
           winTile: tile, selfDraw: false, deltas };
         s.phase = 'over'; s.lastDiscard = null; s.drawnTile = null;
       } else {

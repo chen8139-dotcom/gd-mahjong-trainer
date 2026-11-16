@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { evaluateTurn, COACH_THRESHOLDS } from '../../src/app/coach';
 import { toCounts, type TileId } from '../../src/domain/tiles';
 import type { PlayerView } from '../../src/domain/game-types';
+import { decide } from '../../src/domain/ai/decider';
+import { getRuleset } from '../../src/domain/rulesets';
 
 const viewOf = (hand: TileId[], discards: TileId[][] = [[], [], [], []]): PlayerView => {
   const seen = toCounts([...hand, ...discards.flat()]);
@@ -20,6 +22,13 @@ const viewOf = (hand: TileId[], discards: TileId[][] = [[], [], [], []]): Player
 };
 
 describe('evaluateTurn 教练评估', () => {
+  it('鬼牌局教练使用同一玩家视图和 AI 判断', () => {
+    const hand: TileId[] = ['m1','m2','m3','m4','m5','m6','p1','p2','p3','s1','s2','s3','z1','z7'];
+    const view = { ...viewOf(hand), rulesetId: 'zimoji', wildcards: ['z7'] };
+    const expected = decide(view, 'novice', getRuleset('zimoji'));
+    const result = evaluateTurn(view, { type: 'discard', tile: 'z1' }, 'novice');
+    expect(result.aiDecision).toEqual(expected);
+  });
   it('与 AI 打同一张：不提示', () => {
     // 123m456m789m123p + 55z：AI 打 z5?? 让 AI 自己选，玩家跟随
     const hand: TileId[] = ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'p1', 'p2', 'p3', 'z5', 'z5'];

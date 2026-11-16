@@ -198,6 +198,7 @@ export function importGame(json: string): GameState {
   }
   if (st.pendingBuGang?.eligible) {
     const pb = st.pendingBuGang;
+    const eligible = pb.eligible!;
     try {
       const tileIndex = tileIdToIndex(pb.tile);
       const target = pb.target ?? pb.tile;
@@ -207,7 +208,7 @@ export function importGame(json: string): GameState {
       const probe = { ...st, pendingBuGang: { seat: pb.seat, tile: pb.tile, target: pb.target } };
       const actual = [0, 1, 2, 3].filter((seat) => seat !== pb.seat &&
         legalActions(playerView(probe, seat), getRuleset(st.rulesetId), {}).some((action) => action.type === 'win'));
-      if (actual.length !== pb.eligible.length || actual.some((seat) => !pb.eligible!.includes(seat))) throw new Error('抢杠候选不匹配');
+      if (actual.length !== eligible.length || actual.some((seat) => !eligible.includes(seat))) throw new Error('抢杠候选不匹配');
     } catch (error) {
       throw new MahjongError('BAD_EXPORT', '抢杠状态与手牌不匹配', error);
     }

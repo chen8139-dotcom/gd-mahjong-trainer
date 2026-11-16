@@ -82,6 +82,7 @@ it('补杠的鬼牌可百搭抢杠', async () => {
 
 it('两家可将同一张抢杠鬼牌替代成不同的牌', async () => {
   const { newGame, applyAction, assertTileConservation } = await import('../../src/app/game-controller');
+  const { exportGame, importGame } = await import('../../src/app/game-transfer');
   const { tileIdToIndex } = await import('../../src/domain/tiles');
   const s = newGame({ seed: 42, rulesetId: 'zimoji' });
   s.wildcards = ['z7'];
@@ -97,6 +98,8 @@ it('两家可将同一张抢杠鬼牌替代成不同的牌', async () => {
   let next = applyAction(s, { type: 'buGang', tile: 'z7' });
   expect(next.pendingBuGang?.eligible).toEqual([1, 2]);
   next = applyAction(next, { type: 'win', selfDraw: false }, 1);
+  next = importGame(exportGame(next));
+  expect(next.pendingBuGang?.decisions).toEqual({ 1: 'win' });
   next = applyAction(next, { type: 'win', selfDraw: false }, 2);
   expect(next.result?.winners?.map((w) => w.fan.wildcardAs)).toEqual([['z1'], ['z2']]);
   expect(next.result?.deltas).toEqual([-4, 2, 2, 0]);

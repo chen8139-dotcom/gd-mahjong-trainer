@@ -61,6 +61,8 @@ export interface MatchHandRecord {
   winner: number | null;
   /** 多家胡牌的座位；旧记录保留单赢家字段。 */
   winners?: number[];
+  /** 多赢家各自番数，旧记录缺省。 */
+  winnerFans?: { seat: number; fanTotal: number }[];
   selfDraw: boolean;
   fanTotal: number | null;
   /** 本局四家分数变动（与 GameResult.deltas 同源） */

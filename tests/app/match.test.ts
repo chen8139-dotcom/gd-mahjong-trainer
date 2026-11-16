@@ -55,6 +55,7 @@ describe('advanceMatch：轮庄与连庄', () => {
     expect(next.dealer).toBe(0);
     expect(next.totals).toEqual([2, 2, -4, 0]);
     expect(next.hands[0].winners).toEqual([1, 0]);
+    expect(next.hands[0].winnerFans).toEqual([{ seat: 1, fanTotal: 2 }, { seat: 0, fanTotal: 2 }]);
   });
   it('他家胡（庄家未胡）→ 下庄轮转到南家，累计 delta', () => {
     const m0 = newMatch('match-1', 'zimoji', 42, 1000);

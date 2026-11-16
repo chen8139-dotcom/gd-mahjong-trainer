@@ -9,7 +9,7 @@ import {
   type GameState,
 } from '../../app/game-controller';
 import { legalActions } from '../../domain/engine';
-import { tileName, tileNames, toCounts, tileIdToIndex } from '../../domain/tiles';
+import { indexToTileId, tileName, tileNames, toCounts, tileIdToIndex } from '../../domain/tiles';
 import { evaluateWin } from '../../domain/score';
 import { evaluateTurn, type Divergence } from '../../app/coach';
 import { getRepository } from '../../app/store';
@@ -35,6 +35,14 @@ const POOL_AREA = { 0: 'me', 1: 'south', 2: 'west', 3: 'north' } as const;
 
 /** 座位人话名（打一圈后庄家轮转，风位仅作固定方位标识） */
 const seatName = (seat: number): string => (seat === HUMAN_SEAT ? '你' : `${WIND_NAMES[seat]}家`);
+
+/** 七对结果还原逻辑牌面；暗牌保留实体牌，鬼牌按获胜分解替换。 */
+function winningPairs(state: GameState, seat: number, substitutions: string[] = []): string[] {
+  const tiles = state.hands[seat].flatMap((count, i) => Array<string>(count).fill(indexToTileId(i)));
+  if (!state.result?.selfDraw && state.result?.winTile) tiles.push(state.result.winTile);
+  const natural = tiles.filter((tile) => !state.wildcards?.includes(tile));
+  return [...natural, ...substitutions].sort((a, b) => tileIdToIndex(a) - tileIdToIndex(b));
+}
 
 /** 开一圈中的一局并落库：种子/庄家由圈进度决定（整圈可复现）。 */
 async function startMatchHandAt(repo: Repository, m: MatchState): Promise<Session> {
@@ -63,7 +71,9 @@ function MatchHands({ match }: { match: MatchState }) {
           <span>
             {h.type === 'draw'
               ? '流局'
-              : `${h.winner === null ? '?' : seatName(h.winner)}${h.selfDraw ? '自摸' : '荣胡'} ${h.fanTotal ?? 0} 番`}
+              : h.winnerFans?.length
+                ? `${h.winnerFans.map((w) => `${seatName(w.seat)} ${w.fanTotal} 番`).join('、')}${h.selfDraw ? '自摸' : '荣胡'}`
+                : `${h.winner === null ? '?' : seatName(h.winner)}${h.selfDraw ? '自摸' : '荣胡'} ${h.fanTotal ?? 0} 番`}
           </span>
         </div>
       ))}
@@ -813,6 +823,9 @@ export default function Play() {
                 {(result.winners ?? (result.winner !== null && result.fan ? [{ seat: result.winner, fan: result.fan }] : [])).map((winner) => (
                   <div className="fan-chips" key={winner.seat}>
                     <span>{seatName(winner.seat)}</span>
+                    <span className="fan-chip">{winner.fan.form === 'chiitoi' ? '七对' : winner.fan.form === 'kokushi' ? '十三幺' : '标准牌型'}</span>
+                    {winner.fan.decomp && <span className="fan-chip">将：{tileName(winner.fan.decomp.pair)} · 面子：{winner.fan.decomp.sets.map((set) => tileNames(set)).join(' / ') || '无暗面子'}</span>}
+                    {winner.fan.form === 'chiitoi' && <span className="fan-chip">牌型：{tileNames(winningPairs(session.state, winner.seat, winner.fan.wildcardAs))}</span>}
                     {winner.fan.matched.map((m) => (
                       <span key={m.yakuId} className="fan-chip">
                         {m.name} {m.fan}番
@@ -824,6 +837,7 @@ export default function Play() {
                 ))}
                 <p className="muted">
                   胡牌张：「{tileName(result.winTile ?? '')}」· {result.selfDraw ? '自摸' : session.state.flags.qiangGang ? '抢杠' : '对手点炮'}
+                  {result.from !== undefined && ` · ${seatName(result.from)}赔付`}
                 </p>
               </>
             )}

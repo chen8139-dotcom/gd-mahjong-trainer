@@ -68,11 +68,15 @@ describe('抢杠宣称窗（robKong）', () => {
     expect(s.result).toBeNull();
     expect(s.pendingBuGang?.decisions).toEqual({ 1: 'win' });
     s = deserializeSnapshot(serializeSnapshot(s));
+    s = importGame(exportGame(s));
+    expect(s.pendingBuGang?.decisions).toEqual({ 1: 'win' });
+    expect(() => applyAction(s, { type: 'win', selfDraw: false }, 1)).toThrow();
     s = applyAction(s, { type: 'win', selfDraw: false }, 2);
     expect(s.result?.winners?.map((winner) => winner.seat)).toEqual([1, 2]);
     expect(s.result?.deltas[0]).toBe(-((s.result?.deltas[1] ?? 0) + (s.result?.deltas[2] ?? 0)));
     expect(s.result?.deltas[3]).toBe(0);
     assertTileConservation(s);
+    expect(() => applyAction(s, { type: 'win', selfDraw: false }, 2)).toThrow();
   });
   it('两家抢杠均过时最后一人过后才补杠', () => {
     let s = robScenario('zimoji');
@@ -87,6 +91,15 @@ describe('抢杠宣称窗（robKong）', () => {
     expect(s.phase).toBe('action');
     expect(s.melds[0][0].type).toBe('buGang');
     assertTileConservation(s);
+  });
+  it('导入时拒绝已全员选择或伪造候选的抢杠状态', () => {
+    const s = applyAction(robScenario('zimoji'), { type: 'buGang', tile: 'p5' });
+    const doc = JSON.parse(exportGame(s));
+    doc.state.pendingBuGang.decisions = { 1: 'win' };
+    expect(() => importGame(JSON.stringify(doc))).toThrow('抢杠选择状态非法');
+    const forged = JSON.parse(exportGame(s));
+    forged.state.pendingBuGang.eligible = [1, 2];
+    expect(() => importGame(JSON.stringify(forged))).toThrow('抢杠状态与手牌不匹配');
   });
   it('三家均可抢杠时支持部分放弃并结算其余赢家', () => {
     let s = robScenario('zimoji');

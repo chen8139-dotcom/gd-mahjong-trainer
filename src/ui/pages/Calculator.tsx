@@ -123,6 +123,10 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
           setLoadNote('当前没有进行中的对局');
           return;
         }
+        if (cur.state.wildcards?.length) {
+          setLoadNote('当前计算器暂不支持从鬼牌对局加载，请在牌桌中查看对局。');
+          return;
+        }
         const preset = gameToCalcPreset(cur.state);
         setRulesetId(preset.rulesetId);
         setHand(preset.hand);
