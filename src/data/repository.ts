@@ -59,6 +59,8 @@ export interface MatchHandRecord {
   dealerStreak: number;
   type: 'win' | 'draw';
   winner: number | null;
+  /** 多家胡牌的座位；旧记录保留单赢家字段。 */
+  winners?: number[];
   selfDraw: boolean;
   fanTotal: number | null;
   /** 本局四家分数变动（与 GameResult.deltas 同源） */
@@ -71,6 +73,8 @@ export interface MatchRecord {
   id: string;
   rulesetId: string;
   baseSeed: number;
+  /** 整圈共用的鬼牌种数；旧记录缺省为关闭。 */
+  wildcardCount?: 0 | 1 | 2 | 3;
   /** 下一局编号（含连庄局，从 1 起） */
   handNo: number;
   /** 下一局庄家座位 */

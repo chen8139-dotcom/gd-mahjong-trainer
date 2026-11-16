@@ -8,6 +8,7 @@ import type { GameAction, GamePhase, LastDiscard, PlayerView } from '../domain/g
 import type { MeldRef } from '../domain/agari';
 import { indexToTileId, tileIdToIndex, type TileId } from '../domain/tiles';
 import type { Decision } from '../domain/ai/types';
+import { wildcardMeldChoices } from '../domain/wildcard-meld';
 
 export interface GameConfig {
   seed: number;
@@ -31,6 +32,8 @@ export interface GameResult {
   winTile: TileId | null;
   selfDraw: boolean;
   fan: FanResult | null;
+  /** 多家抢杠时逐家记录；旧对局没有该字段。 */
+  winners?: { seat: number; fan: FanResult }[];
   /** 四家分数变动（点数，v1 简化：自摸三家各付、点炮者独付） */
   deltas: number[];
 }
@@ -55,7 +58,7 @@ export interface GameState {
   drawnTile: TileId | null;
   lastDiscard: LastDiscard | null;
   /** 抢杠宣称窗（robKong 流派）：补杠暂缓结算，该牌仍持有于 seat 手中（守恒不变），等待他人抢杠或过 */
-  pendingBuGang?: { seat: number; tile: TileId };
+  pendingBuGang?: { seat: number; tile: TileId; target?: TileId };
   flags: GameFlags;
   result: GameResult | null;
   discardCount: number;
@@ -74,6 +77,15 @@ export class MahjongError extends Error {
 }
 
 const meldTileCount = (m: MeldRef): number => (m.type === 'peng' || m.type === 'chi' ? 3 : 4);
+
+function consumeMeldTiles(s: GameState, seat: number, target: TileId, chosen: TileId[], needed: number): void {
+  const choices = wildcardMeldChoices(s.hands[seat], target, s.wildcards ?? [], needed);
+  const normalized = [...chosen].sort().join(',');
+  if (!choices.some((tiles) => [...tiles].sort().join(',') === normalized)) {
+    throw new MahjongError('ILLEGAL_CLAIM', '碰杠所用牌不合法');
+  }
+  for (const tile of chosen) s.hands[seat][tileIdToIndex(tile)]--;
+}
 
 export function newGame(cfg: GameConfig): GameState {
   const wildcardCount = cfg.wildcardCount ?? 0;
@@ -222,20 +234,20 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         break;
       }
       case 'anGang': {
-        const t = tileIdToIndex(action.tile);
-        if (s.hands[s.turn][t] !== 4) throw new MahjongError('ILLEGAL_KONG', `手中无四张 ${action.tile}`);
-        s.hands[s.turn][t] = 0;
-        s.melds[s.turn].push({ type: 'anGang', tiles: [action.tile, action.tile, action.tile, action.tile] });
+        const tiles = action.tiles ?? [action.tile, action.tile, action.tile, action.tile];
+        consumeMeldTiles(s, s.turn, action.tile, tiles, 4);
+        s.melds[s.turn].push({ type: 'anGang', tiles, ...(s.wildcards?.length ? { target: action.tile } : {}) });
         drawTo(s, s.turn, true);
         break;
       }
       case 'buGang': {
         const t = tileIdToIndex(action.tile);
-        const meld = s.melds[s.turn].find((m) => m.type === 'peng' && tileIdToIndex(m.tiles[0]) === t);
-        if (!meld || s.hands[s.turn][t] < 1) throw new MahjongError('ILLEGAL_KONG', `无可补杠的 ${action.tile}`);
+        const target = action.target ?? action.tile;
+        const meld = s.melds[s.turn].find((m) => m.type === 'peng' && (m.target ?? m.tiles[0]) === target);
+        if (!meld || s.hands[s.turn][t] < 1 || (action.tile !== target && !s.wildcards?.includes(action.tile))) throw new MahjongError('ILLEGAL_KONG', `无可补杠的 ${action.tile}`);
         if (ruleset.robKong && robCandidateExists(s, s.turn, t)) {
           // 抢杠宣称窗：牌留在手中、副露保持 peng（守恒不变），等待他人抢杠或过
-          s.pendingBuGang = { seat: s.turn, tile: action.tile };
+          s.pendingBuGang = { seat: s.turn, tile: action.tile, ...(target !== action.tile ? { target } : {}) };
           s.lastDiscard = { tile: action.tile, from: s.turn };
           s.drawnTile = null;
           s.phase = 'claims';
@@ -267,7 +279,8 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         throw new MahjongError('WRONG_PHASE_ACTION', `抢杠宣称窗仅可胡或过，不支持 ${action.type}`);
       }
       if (action.type === 'pass') {
-        const meld = s.melds[from].find((m) => m.type === 'peng' && tileIdToIndex(m.tiles[0]) === t);
+        const target = s.pendingBuGang.target ?? tile;
+        const meld = s.melds[from].find((m) => m.type === 'peng' && (m.target ?? m.tiles[0]) === target);
         if (!meld) throw new MahjongError('ILLEGAL_KONG', '抢杠窗状态损坏：原碰副露丢失');
         s.hands[from][t]--;
         meld.type = 'buGang';
@@ -316,9 +329,9 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         break;
       }
       case 'peng': {
-        if (s.hands[claimant][t] < 2) throw new MahjongError('ILLEGAL_CLAIM', `手中不足两张 ${tile}`);
-        s.hands[claimant][t] -= 2;
-        s.melds[claimant].push({ type: 'peng', tiles: [tile, tile, tile] });
+        const tiles = action.tiles ?? [tile, tile];
+        consumeMeldTiles(s, claimant, tile, tiles, 2);
+        s.melds[claimant].push({ type: 'peng', tiles: [tile, ...tiles], ...(s.wildcards?.length ? { target: tile } : {}) });
         s.discards[from].pop();
         s.turn = claimant;
         s.lastDiscard = null;
@@ -327,9 +340,9 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         break;
       }
       case 'mingGang': {
-        if (s.hands[claimant][t] < 3) throw new MahjongError('ILLEGAL_CLAIM', `手中不足三张 ${tile}`);
-        s.hands[claimant][t] -= 3;
-        s.melds[claimant].push({ type: 'mingGang', tiles: [tile, tile, tile, tile] });
+        const tiles = action.tiles ?? [tile, tile, tile];
+        consumeMeldTiles(s, claimant, tile, tiles, 3);
+        s.melds[claimant].push({ type: 'mingGang', tiles: [tile, ...tiles], ...(s.wildcards?.length ? { target: tile } : {}) });
         s.discards[from].pop();
         s.turn = claimant;
         s.lastDiscard = null;

@@ -38,7 +38,7 @@ const seatName = (seat: number): string => (seat === HUMAN_SEAT ? '你' : `${WIN
 
 /** 开一圈中的一局并落库：种子/庄家由圈进度决定（整圈可复现）。 */
 async function startMatchHandAt(repo: Repository, m: MatchState): Promise<Session> {
-  const state = newGame({ seed: handSeed(m), rulesetId: m.rulesetId, dealer: m.dealer });
+  const state = newGame({ seed: handSeed(m), rulesetId: m.rulesetId, dealer: m.dealer, wildcardCount: m.wildcardCount ?? 0 });
   const gameId = crypto.randomUUID();
   await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
   await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
@@ -274,6 +274,7 @@ export default function Play() {
         seed: m ? handSeed(m) : Number(seed ?? Date.now() % 100000),
         rulesetId: m ? m.rulesetId : s?.rulesetId ?? 'tuidaohu',
         dealer: m ? m.dealer : undefined,
+        wildcardCount: m?.wildcardCount ?? 0,
       });
       const gameId = crypto.randomUUID();
       await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
@@ -723,11 +724,11 @@ export default function Play() {
               {gangActions.map((a, i) =>
                 a.type === 'anGang' ? (
                   <button key={i} data-testid={`btn-angang-${a.tile}`} onClick={() => humanAct(a)}>
-                    暗杠「{tileName(a.tile)}」
+                    暗杠「{tileName(a.tile)}」{a.tiles ? `（${tileNames(a.tiles)}）` : ''}
                   </button>
                 ) : (
                   <button key={i} data-testid={`btn-bugang-${a.tile}`} onClick={() => humanAct(a)}>
-                    补杠「{tileName(a.tile)}」
+                    补杠「{tileName(a.target ?? a.tile)}」{a.target ? `（${tileName(a.tile)}）` : ''}
                   </button>
                 ),
               )}
@@ -739,8 +740,8 @@ export default function Play() {
             <div className="action-bar" data-testid="claim-bar">
               {claimLegal.map((a, i) => {
                 if (a.type === 'win') return <button key={i} className="primary" data-testid="claim-win" onClick={() => humanAct(a)}>胡！</button>;
-                if (a.type === 'peng') return <button key={i} data-testid="claim-peng" onClick={() => humanAct(a)}>碰</button>;
-                if (a.type === 'mingGang') return <button key={i} data-testid="claim-gang" onClick={() => humanAct(a)}>杠</button>;
+                if (a.type === 'peng') return <button key={i} data-testid="claim-peng" onClick={() => humanAct(a)}>碰{a.tiles ? `（${tileNames(a.tiles)}）` : ''}</button>;
+                if (a.type === 'mingGang') return <button key={i} data-testid="claim-gang" onClick={() => humanAct(a)}>杠{a.tiles ? `（${tileNames(a.tiles)}）` : ''}</button>;
                 if (a.type === 'chi') {
                   const sig = [...a.tiles].sort().join('');
                   return (

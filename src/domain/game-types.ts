@@ -5,10 +5,10 @@ import type { TileId } from './tiles';
 export type GameAction =
   | { type: 'discard'; tile: TileId }
   | { type: 'chi'; tiles: [TileId, TileId]; from: number } // tiles = 从手中打出的两张搭子
-  | { type: 'peng'; from: number }
-  | { type: 'mingGang'; from: number } // 宣称别人打出的牌开明杠
-  | { type: 'buGang'; tile: TileId } // 已碰的第四张补杠
-  | { type: 'anGang'; tile: TileId }
+  | { type: 'peng'; from: number; tiles?: TileId[] }
+  | { type: 'mingGang'; from: number; tiles?: TileId[] } // 手牌中使用的真实牌
+  | { type: 'buGang'; tile: TileId; target?: TileId } // tile 为实际补杠牌
+  | { type: 'anGang'; tile: TileId; tiles?: TileId[] } // tile 为逻辑目标
   | { type: 'win'; selfDraw: boolean; tile?: TileId }
   | { type: 'pass' };
 
@@ -34,7 +34,7 @@ export interface PlayerView {
   drawnTile?: TileId;
   lastDiscard?: LastDiscard;
   /** 抢杠宣称窗（robKong 流派）：补杠暂缓结算，该牌仍持有于 seat 手中，等待他人抢杠或过 */
-  pendingBuGang?: { seat: number; tile: TileId };
+  pendingBuGang?: { seat: number; tile: TileId; target?: TileId };
   rulesetId: string;
   /** 本局公开的鬼牌牌种。 */
   wildcards?: TileId[];

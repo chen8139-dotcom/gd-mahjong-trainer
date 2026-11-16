@@ -55,14 +55,14 @@ const meldIsTriplet = (m: MeldRef) => m.type !== 'chi';
 const allTiles = (d: Decomposition, melded: MeldRef[]): TileId[] => [
   d.pair,
   ...d.sets.flat(),
-  ...melded.flatMap((m) => m.tiles),
+  ...melded.flatMap((m) => m.target ? m.tiles.map(() => m.target!) : m.tiles),
 ];
 
 /** 三元组刻子（暗刻 + 明碰/杠）中匹配过滤条件的组数 */
 const tripletCount = (d: Decomposition, melded: MeldRef[], tile: (t: TileId) => boolean): number => {
   let n = 0;
   for (const s of d.sets) if (isTripletSet(s) && tile(s[0])) n++;
-  for (const m of melded) if (m.type !== 'chi' && tile(m.tiles[0])) n++;
+  for (const m of melded) if (m.type !== 'chi' && tile(m.target ?? m.tiles[0])) n++;
   return n;
 };
 
@@ -119,7 +119,7 @@ export const YAKU_PREDICATES: Record<PredicateId, Predicate> = {
       bySuit.get(suit)!.push(rankOf(t0));
     };
     for (const s of d.sets) if (isTripletSet(s)) addTriplet(s[0]);
-    for (const m of c.melded) if (m.type !== 'chi') addTriplet(m.tiles[0]);
+    for (const m of c.melded) if (m.type !== 'chi') addTriplet(m.target ?? m.tiles[0]);
     for (const ranks of bySuit.values()) {
       const sorted = [...new Set(ranks)].sort((a, b) => a - b);
       for (let i = 0; i + 2 < sorted.length; i++) {

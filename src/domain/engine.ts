@@ -5,6 +5,7 @@ import type { WinContext } from './yaku';
 import type { Ruleset } from './rulesets/types';
 import type { GameAction, PlayerView } from './game-types';
 import { indexToTileId, tileIdToIndex, toCounts } from './tiles';
+import { wildcardMeldChoices } from './wildcard-meld';
 
 /** 按 ruleset 启用的胡牌形取最小向听；-1 = 已构成胡形 */
 export function shantenOf(hand: number[], meldedSets: number, ruleset: Ruleset): number {
@@ -69,6 +70,21 @@ export function legalActions(
     for (let t = 0; t < 34; t++) {
       if (handCounts[t] > 0) actions.push({ type: 'discard', tile: indexToTileId(t) });
       const melds = view.melds[view.seat];
+      if (view.wildcards?.length) {
+        const target = indexToTileId(t);
+        for (const tiles of wildcardMeldChoices(handCounts, target, view.wildcards, 4)) {
+          actions.push({ type: 'anGang', tile: target, tiles });
+        }
+        if (handCounts[t] > 0) {
+          for (const meld of melds) {
+            const meldTarget = meld.target ?? meld.tiles[0];
+            if (meld.type === 'peng' && (target === meldTarget || view.wildcards.includes(target))) {
+              actions.push({ type: 'buGang', tile: target, target: meldTarget });
+            }
+          }
+        }
+        continue;
+      }
       if (handCounts[t] === 4) actions.push({ type: 'anGang', tile: indexToTileId(t) });
       if (
         handCounts[t] >= 1 &&
@@ -100,8 +116,13 @@ export function legalActions(
       actions.push({ type: 'win', selfDraw: false, tile });
     }
     handCounts[t]--;
-    if (handCounts[t] >= 2) actions.push({ type: 'peng', from });
-    if (handCounts[t] === 3) actions.push({ type: 'mingGang', from });
+    if (view.wildcards?.length) {
+      for (const tiles of wildcardMeldChoices(handCounts, tile, view.wildcards, 2)) actions.push({ type: 'peng', from, tiles });
+      for (const tiles of wildcardMeldChoices(handCounts, tile, view.wildcards, 3)) actions.push({ type: 'mingGang', from, tiles });
+    } else {
+      if (handCounts[t] >= 2) actions.push({ type: 'peng', from });
+      if (handCounts[t] === 3) actions.push({ type: 'mingGang', from });
+    }
     const nextSeat = (from + 1) % 4;
     if (ruleset.allowsChi && view.seat === nextSeat && t < 27) {
       const base = Math.floor(t / 9) * 9;

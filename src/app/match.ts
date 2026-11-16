@@ -12,12 +12,16 @@ export type { MatchHandRecord };
 export type MatchState = MatchRecord;
 
 /** 新开一圈：真人（seat 0，东位）先坐庄。 */
-export function newMatch(id: string, rulesetId: string, baseSeed: number, createdAt: number): MatchState {
+export function newMatch(id: string, rulesetId: string, baseSeed: number, createdAt: number, wildcardCount: 0 | 1 | 2 | 3 = 0): MatchState {
+  if (!Number.isInteger(wildcardCount) || wildcardCount < 0 || wildcardCount > 3 || (wildcardCount > 0 && rulesetId !== 'zimoji')) {
+    throw new Error('只有自摸鸡支持 0 至 3 种鬼牌');
+  }
   return {
     v: 1,
     id,
     rulesetId,
     baseSeed,
+    wildcardCount,
     handNo: 1,
     dealer: 0,
     dealerStreak: 1,
@@ -46,13 +50,14 @@ export function advanceMatch(m: MatchState, gameId: string, result: GameResult):
     dealerStreak: m.dealerStreak,
     type: result.type,
     winner: result.winner,
+    ...(result.winners ? { winners: result.winners.map((winner) => winner.seat) } : {}),
     selfDraw: result.selfDraw,
     fanTotal: result.fan?.total ?? null,
     deltas: [...result.deltas],
   };
   const totals = m.totals.map((t, i) => t + (result.deltas[i] ?? 0));
   // 连庄：庄家胡牌或流局（过庄）；他家胡 → 下庄轮转
-  const dealerStays = result.type === 'draw' || result.winner === m.dealer;
+  const dealerStays = result.type === 'draw' || (result.winners ? result.winners.some((winner) => winner.seat === m.dealer) : result.winner === m.dealer);
   // 收圈 = 下庄且已结束的是第 4 个庄家任期（连续同庄的局算一个任期；连庄只延长任期，
   // 用 handNo 计数会在连庄场景提前误判收圈，故从局史推导任期数）
   const hands = [...m.hands, hand];

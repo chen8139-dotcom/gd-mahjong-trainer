@@ -5,6 +5,8 @@ import { indexToTileId, tileIdToIndex, type TileId } from './tiles';
 export interface MeldRef {
   type: 'peng' | 'chi' | 'mingGang' | 'anGang' | 'buGang';
   tiles: TileId[];
+  /** 百搭碰杠的逻辑牌种，tiles 始终保留真实牌面。 */
+  target?: TileId;
 }
 
 export interface Decomposition {

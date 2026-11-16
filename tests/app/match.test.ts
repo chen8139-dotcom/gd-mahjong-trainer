@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { advanceMatch, handSeed, HANDS_PER_CIRCLE, newMatch, ranking } from '../../src/app/match';
 import type { GameResult } from '../../src/app/game-controller';
+import { newGame, serializeSnapshot, deserializeSnapshot } from '../../src/app/game-controller';
 
 /** 造一个结算结果（自摸鸡语义：赢家自摸、三家各付 n） */
 function selfDrawWin(winner: number, fan: number): GameResult {
@@ -12,6 +13,20 @@ function selfDrawWin(winner: number, fan: number): GameResult {
 const DRAW: GameResult = { type: 'draw', winner: null, winTile: null, selfDraw: false, fan: null, deltas: [0, 0, 0, 0] };
 
 describe('newMatch：开圈初值', () => {
+  it('保存鬼牌种数并用每局种子确定牌种，旧记录默认为关闭', () => {
+    const m = newMatch('wild', 'zimoji', 42, 1000, 3);
+    const createHand = (handNo: number) => newGame({
+      seed: handSeed({ ...m, handNo }), rulesetId: m.rulesetId, wildcardCount: m.wildcardCount ?? 0,
+    });
+    const first = createHand(1);
+    expect(first.wildcards).toHaveLength(3);
+    expect(createHand(2).wildcards).toHaveLength(3);
+    expect(createHand(2).wildcards).not.toEqual(first.wildcards);
+    expect(deserializeSnapshot(serializeSnapshot(first)).wildcards).toEqual(first.wildcards);
+    const old = { ...m, wildcardCount: undefined };
+    expect(newGame({ seed: handSeed(old), rulesetId: old.rulesetId, wildcardCount: old.wildcardCount ?? 0 }).wildcards).toEqual([]);
+    expect(() => newMatch('bad', 'tuidaohu', 42, 1000, 1)).toThrow();
+  });
   it('真人（东位）先坐庄，无局记录', () => {
     const m = newMatch('match-1', 'zimoji', 42, 1000);
     expect(m.dealer).toBe(0);
@@ -31,6 +46,16 @@ describe('newMatch：开圈初值', () => {
 });
 
 describe('advanceMatch：轮庄与连庄', () => {
+  it('多人抢杠包含庄家时连庄并累计全部分数', () => {
+    const m = newMatch('match-multiple', 'zimoji', 42, 1000);
+    const fan = { total: 2, capped: false, form: 'standard' as const, matched: [] };
+    const result: GameResult = { type: 'win', winner: 1, winTile: 'm1', selfDraw: false, fan,
+      winners: [{ seat: 1, fan }, { seat: 0, fan }], deltas: [2, 2, -4, 0] };
+    const next = advanceMatch(m, 'g1', result);
+    expect(next.dealer).toBe(0);
+    expect(next.totals).toEqual([2, 2, -4, 0]);
+    expect(next.hands[0].winners).toEqual([1, 0]);
+  });
   it('他家胡（庄家未胡）→ 下庄轮转到南家，累计 delta', () => {
     const m0 = newMatch('match-1', 'zimoji', 42, 1000);
     const m1 = advanceMatch(m0, 'g1', selfDrawWin(1, 3)); // 南家自摸 3 番

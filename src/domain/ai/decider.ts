@@ -183,7 +183,8 @@ function decideClaim(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset)
   const claim = peng ?? chi;
   if (claim) {
     if (claim.type === 'peng') {
-      hand[t] -= 2; // 手中的对子进副露
+      if (claim.tiles) for (const x of claim.tiles) hand[tileIdToIndex(x)]--;
+      else hand[t] -= 2; // 手中的对子进副露
     } else if (claim.type === 'chi') {
       for (const x of claim.tiles) hand[tileIdToIndex(x)]--; // 手中的搭子两张进副露
     }
