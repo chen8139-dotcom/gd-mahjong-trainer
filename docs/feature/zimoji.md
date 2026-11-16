@@ -1,6 +1,6 @@
 # 新流派「自摸鸡」开发计划（仅自摸 · 不可吃 · 可碰杠 · 抢杠为唯一荣胡例外）
 
-> 状态：计划 v2（未实施，2026-11-15）。v1→v2 变更：抢杠荣胡确定为仅自摸的唯一例外——由此新增引擎前置「抢杠宣称窗」（当前引擎 `buGang` 即时生效、无抢杠窗）。已拍板：起胡番数 2（§2.4）、抢杠荣胡例外（§3）。
+> 状态：**已实施**（main @ e51ad8f，2026-11-15）——本文件保留为设计决策记录；AI 侧适配（伪守势修复、档位塌缩、基线对打）见 `ai-tier2-zimoji.md`。原计划要点：抢杠荣胡为仅自摸的唯一例外，引擎新增抢杠宣称窗（`buGang` 有候选抢者时进窗）；已拍板：起胡番数 2（§2.4）、抢杠荣胡例外（§3）。
 > 负责人：待定 · 目标读者：本项目维护者。
 > 前置阅读：`src/domain/rulesets/types.ts`、`src/domain/engine.ts`（legalActions）、`src/app/game-controller.ts`（applyAction / autoStep）、`src/app/game-transfer.ts`（快照导入）、`docs/feature/`（本目录）。
 
@@ -142,6 +142,11 @@ action 阶段的自摸胡判定**不动**。`MahjongError` 接口不改（复用
 - **coach**：与对局同规则集对比，无需改；手跑一局确认提示正常。
 
 ## 6. 接线点一览
+
+> 落地差异（2026-11-16 注）：UI 侧实际落地与本表有两处出入——①`FirstRun.tsx` 从未存在
+> （首启选择走 NewGame 页）；②本表撰写时的「Settings 选择器」入口后来已迁至新对局页
+> `/play/new`（`NewGame.tsx` + `RulesetPicker`，main @ 36f9c13），Settings 不再承载流派
+> 选择。引擎与 AI 侧各行与实际一致。
 
 | 位置 | 改动 | 量级 |
 | --- | --- | --- |
