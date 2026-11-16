@@ -18,6 +18,8 @@ import { getRuleset } from '../../domain/rulesets';
 import { decide } from '../../domain/ai/decider';
 import type { Difficulty } from '../../domain/ai/types';
 import type { GameAction } from '../../domain/game-types';
+import { advanceMatch, handSeed, newMatch, ranking, type MatchState } from '../../app/match';
+import type { Repository } from '../../data/repository';
 import TileFace from '../components/TileFace';
 
 const HUMAN_SEAT = 0;
@@ -30,6 +32,76 @@ interface Session {
 const WIND_NAMES = ['东', '南', '西', '北'];
 /** 中央弃牌池四象限：对家(2)在上、左家(3)在左、右家(1)在右、你(0)在下 */
 const POOL_AREA = { 0: 'me', 1: 'south', 2: 'west', 3: 'north' } as const;
+
+/** 座位人话名（打一圈后庄家轮转，风位仅作固定方位标识） */
+const seatName = (seat: number): string => (seat === HUMAN_SEAT ? '你' : `${WIND_NAMES[seat]}家`);
+
+/** 开一圈中的一局并落库：种子/庄家由圈进度决定（整圈可复现）。 */
+async function startMatchHandAt(repo: Repository, m: MatchState): Promise<Session> {
+  const state = newGame({ seed: handSeed(m), rulesetId: m.rulesetId, dealer: m.dealer });
+  const gameId = crypto.randomUUID();
+  await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
+  await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
+  return { gameId, state };
+}
+
+/** 新开一圈（废弃旧圈由调用方负责）。 */
+function makeNewMatch(rulesetId: string, baseSeed: number): MatchState {
+  return newMatch(crypto.randomUUID(), rulesetId, baseSeed, Date.now());
+}
+
+/** 一圈内已完成各局的紧凑列表（圈面板与总结算共用）。 */
+function MatchHands({ match }: { match: MatchState }) {
+  return (
+    <div className="match-hands" data-testid="match-hands">
+      {match.hands.map((h) => (
+        <div key={h.gameId} className="match-hand-row">
+          <span>第 {h.handNo} 局</span>
+          <span className="muted">
+            {seatName(h.dealer)}坐庄{h.dealerStreak > 1 ? ` ×${h.dealerStreak}` : ''}
+          </span>
+          <span>
+            {h.type === 'draw'
+              ? '流局'
+              : `${h.winner === null ? '?' : seatName(h.winner)}${h.selfDraw ? '自摸' : '荣胡'} ${h.fanTotal ?? 0} 番`}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** 圈总结算：四家累计（按名次排序）+ 各局回顾。 */
+function MatchSummary({ match }: { match: MatchState }) {
+  const order = ranking(match);
+  return (
+    <div data-testid="match-summary" className="match-summary">
+      <b>一圈结束 · 总结算</b>
+      <table className="score-table" data-testid="match-final">
+        <thead>
+          <tr>
+            <th>名次</th>
+            <th>玩家</th>
+            <th>累计积分</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order.map((seat, rank) => (
+            <tr key={seat} className={seat === HUMAN_SEAT ? 'self-row' : ''}>
+              <td>第 {rank + 1}</td>
+              <td>{seatName(seat)}</td>
+              <td className={match.totals[seat] > 0 ? 'pos' : match.totals[seat] < 0 ? 'neg' : ''}>
+                {match.totals[seat] > 0 ? '+' : ''}
+                {match.totals[seat]}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <MatchHands match={match} />
+    </div>
+  );
+}
 
 /** 对手方位面板：只展示风位/庄家/AI 标记、暗牌数与副露；弃牌集中到中央牌池 */
 function SeatPanel({ state, seat, pos }: { state: GameState; seat: number; pos: 'top' | 'left' | 'right' }) {
@@ -88,12 +160,44 @@ export default function Play() {
   }, [hint]);
   const [error, setError] = useState<string | null>(null);
   const startedRef = useRef(false);
+  // 打一圈（match）：圈进度独立于单局快照持久化；局间/收圈后由本页直接渲染圈面板。
+  // matchRef 供 effect/定时器读取最新值（跨渲染闭包防陈旧）
+  const [match, setMatch] = useState<MatchState | null>(null);
+  const matchRef = useRef<MatchState | null>(null);
+  matchRef.current = match;
 
   // 自动模式（E2E/演示）：人类座位由同难度 AI 代打
   const autoMode = params.get('auto') === '1';
   const seed = params.get('seed');
+  // ?match=1：显式新开一圈（新对局页勾选「打一圈」跳转 / E2E 直达），旧圈废弃
+  const startMatch = params.get('match') === '1';
   // 配置页「开始对局」/结算「再来一局」带 autostart 标记回跳：无进行中对局时免询问直接开局
   const autostart = (location.state as { autostart?: boolean } | null)?.autostart === true;
+
+  // 开一圈的下一手（圈未完时有效）：庄家与种子来自圈进度；清空教练提示与分歧点
+  const startMatchHand = useCallback(async (): Promise<void> => {
+    const m = matchRef.current;
+    if (!m || m.finished) return;
+    const repo = await getRepository();
+    const next = await startMatchHandAt(repo, m);
+    setHint(null);
+    setDivergences([]);
+    setSession(next);
+  }, []);
+
+  // 再来一圈：废弃当前圈、新开一圈并直接开第 1 局
+  const startNewMatch = useCallback(async (): Promise<void> => {
+    const repo = await getRepository();
+    await repo.abandonActiveMatch();
+    const m = makeNewMatch(matchRef.current?.rulesetId ?? 'zimoji', Date.now() % 100000);
+    await repo.saveMatch(m);
+    setMatch(m);
+    matchRef.current = m; // 落库间隙同步引用，startMatchHandAt 后续渲染才到来
+    const next = await startMatchHandAt(repo, m);
+    setHint(null);
+    setDivergences([]);
+    setSession(next);
+  }, []);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -103,7 +207,7 @@ export default function Play() {
       const s = await repo.getSettings();
       if (s) setSettings({ difficulty: s.difficulty, hintEnabled: s.hintEnabled });
 
-      // 崩溃恢复：存在进行中对局则询问（SC-7）
+      // 崩溃恢复：存在进行中对局则询问（SC-7）。优先级最高——局中刷新即使 URL 仍带 ?match=1 也先恢复原局
       if (!autoMode) {
         const ongoing = (await repo.listGames(5)).find((g) => g.outcome === 'ongoing');
         if (ongoing) {
@@ -120,21 +224,64 @@ export default function Play() {
           }
           return;
         }
-        // 无进行中对局：先到配置页选流派与难度（首页卡片/导航/直达 URL 一致）；
-        // 配置页「开始对局」与结算「再来一局」带 autostart 标记回跳时才免询问直接开局。
-        // 查询串（如 E2E 的 ?seed=42）透传给配置页，由其确认时原样带回
-        if (!autostart) {
+      }
+      // auto 模式不做恢复询问；?match=1 显式开新圈时既有 ongoing 局让位废弃（避免残留僵尸局）
+      if (autoMode && startMatch) {
+        const ongoing = (await repo.listGames(5)).find((g) => g.outcome === 'ongoing');
+        if (ongoing) await repo.finishGame(ongoing.id, 'abandoned');
+      }
+
+      // 打一圈上下文：?match=1 语义为「确保有一圈」——已有未完成圈则续用（刷新场景，Play 按
+      // location.key 重挂导致 init 重跑时不得新建圈）；否则废弃旧圈、新开一圈（新对局页确认
+      // 入口会先废弃旧圈，正常入口总走新建分支）
+      let m: MatchState | null = null;
+      if (startMatch) {
+        const active = await repo.getActiveMatch();
+        if (active && !active.finished) {
+          m = active;
+        } else {
+          await repo.abandonActiveMatch();
+          m = makeNewMatch(s?.rulesetId ?? 'zimoji', Number(seed ?? Date.now() % 100000));
+          await repo.saveMatch(m);
+        }
+      } else {
+        m = await repo.getActiveMatch();
+      }
+
+      if (!autoMode && !autostart) {
+        if (!m) {
+          // 无进行中对局、无圈可续：先到配置页选流派与难度（首页卡片/导航/直达 URL 一致）；
+          // 配置页「开始对局」与结算「再来一局」带 autostart 标记回跳时才免询问直接开局。
+          // 查询串（如 E2E 的 ?seed=42）透传给配置页，由其确认时原样带回
           navigate({ pathname: '/play/new', search: params.toString() }, { replace: true });
           return;
         }
+        setMatch(m); // 局间刷新 / 收圈后刷新：渲染圈面板（待开下一局或总结算）
+        return;
       }
-      const state = newGame({ seed: Number(seed ?? Date.now() % 100000), rulesetId: s?.rulesetId ?? 'tuidaohu' });
+      if (m && m.finished) {
+        // auto 模式撞上已完成圈：停在总结算，不再续打；手动 autostart（开单局）则忽略旧圈
+        if (autoMode) {
+          setMatch(m);
+          return;
+        }
+        setMatch(null);
+        m = null;
+      }
+
+      // 开局：一圈模式下种子/庄家来自圈进度（新圈首手或续打下一手），单局走原逻辑
+      const state = newGame({
+        seed: m ? handSeed(m) : Number(seed ?? Date.now() % 100000),
+        rulesetId: m ? m.rulesetId : s?.rulesetId ?? 'tuidaohu',
+        dealer: m ? m.dealer : undefined,
+      });
       const gameId = crypto.randomUUID();
       await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
       await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
+      setMatch(m);
       setSession({ gameId, state });
     })();
-  }, [autoMode, autostart, seed, navigate]);
+  }, [autoMode, autostart, seed, startMatch, navigate]);
 
   const resume = useCallback(async (accept: boolean) => {
     const repo = await getRepository();
@@ -154,8 +301,26 @@ export default function Play() {
       setError('快照损坏，无法恢复，请开新局');
       return;
     }
+    // 圈上下文随恢复装载（局中刷新：该 ongoing 局属于一圈中的某手）；与 session 同批更新。
+    // 已收圈/废弃的旧圈不装载——恢复的是单局时结果面板不得混入旧圈总结算
+    const active = await repo.getActiveMatch();
+    if (active && !active.finished) setMatch(active);
     setSession({ gameId: id, state: deserializeSnapshot(last.json) });
   }, [resumeCandidate, navigate]);
+
+  // 一圈推进：本局结束后把 delta 累计进圈并落库（按 gameId 幂等，重渲染不重复推进）
+  useEffect(() => {
+    const m = matchRef.current;
+    if (!session || !m || m.finished) return;
+    const st = session.state;
+    if (st.phase !== 'over' || !st.result) return;
+    if (m.hands.some((h) => h.gameId === session.gameId)) return;
+    const next = advanceMatch(m, session.gameId, st.result);
+    setMatch(next);
+    void getRepository()
+      .then((repo) => repo.saveMatch(next))
+      .catch(() => undefined);
+  }, [session, match]);
 
   // 落库单步快照 + 应用动作
   // 落库单步快照 + 应用动作；非法动作转为顶部错误提示，避免更新期抛错导致白屏
@@ -191,6 +356,12 @@ export default function Play() {
     if (st.phase === 'dealing') return;
     if (st.phase === 'over') {
       persistFinish(st);
+      // 打一圈自动模式：本局结束后稍候自动开下一手（圈推进 effect 先落盘，回调读最新 ref）；
+      // 收圈则不续打，停在总结算面板
+      if (autoMode && matchRef.current && !matchRef.current.finished) {
+        const timer = setTimeout(() => void startMatchHand(), 900);
+        return () => clearTimeout(timer);
+      }
       return;
     }
     if (st.result) return;
@@ -389,6 +560,61 @@ export default function Play() {
       </div>
     );
   }
+  if (!session && match) {
+    // 局间（圈进行中）或收圈后（无对局会话，如刷新）的圈面板：待开下一局或一圈总结算
+    return (
+      <div className="page play-page resume-page" data-testid="match-panel">
+        <div className="resume-panel">
+          <h2>{match.finished ? '一圈结束' : `第 ${match.handNo} 局待开`}</h2>
+          {!match.finished && (
+            <p className="resume-sub">
+              下一局：{seatName(match.dealer)}坐庄{match.dealerStreak > 1 ? `（连庄 ${match.dealerStreak}）` : ''}
+            </p>
+          )}
+          {match.hands.length > 0 && <MatchHands match={match} />}
+          {match.finished ? (
+            <MatchSummary match={match} />
+          ) : (
+            match.hands.length > 0 && (
+              <table className="score-table" data-testid="match-totals">
+                <thead>
+                  <tr>
+                    <th>玩家</th>
+                    <th>一圈累计</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {match.totals.map((t, i) => (
+                    <tr key={i} className={i === HUMAN_SEAT ? 'self-row' : ''}>
+                      <td>{seatName(i)}</td>
+                      <td className={t > 0 ? 'pos' : t < 0 ? 'neg' : ''}>
+                        {t > 0 ? '+' : ''}
+                        {t}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          )}
+          <div className="resume-actions">
+            {match.finished ? (
+              <button className="primary" data-testid="match-again" onClick={() => void startNewMatch()}>
+                再来一圈
+              </button>
+            ) : (
+              <button className="primary" data-testid="match-next" onClick={() => void startMatchHand()}>
+                开始第 {match.handNo} 局
+              </button>
+            )}
+            <button data-testid="match-home" onClick={() => navigate('/')}>
+              返回首页
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!session || !view) return <div className="page">加载中…</div>;
 
   const result = session.state.result;
@@ -401,7 +627,16 @@ export default function Play() {
       <div className="table-grid">
         <div className="table-wall">
           <div className="wall-bar">
-            <span className="wall-round">东风局</span>
+            <span className="wall-round">
+              {match && !match.finished
+                ? `第 ${match.handNo} 局 · ${WIND_NAMES[session.state.dealer]}家坐庄${match.dealerStreak > 1 ? `（连庄 ${match.dealerStreak}）` : ''}`
+                : '东风局'}
+            </span>
+            {match && !match.finished && (
+              <span className="match-strip" data-testid="match-strip">
+                累计 {match.totals.map((t, i) => `${seatName(i)} ${t > 0 ? `+${t}` : t}`).join(' · ')}
+              </span>
+            )}
             <div className="wall-progress">
               <div className="wall-progress-fill" style={{ width: `${(session.state.wall.length / 136) * 100}%` }} />
             </div>
@@ -594,6 +829,28 @@ export default function Play() {
                 ))}
               </tbody>
             </table>
+            {match && !match.finished && (
+              <table className="score-table" data-testid="match-totals">
+                <thead>
+                  <tr>
+                    <th>玩家</th>
+                    <th>一圈累计</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {match.totals.map((t, i) => (
+                    <tr key={i} className={i === HUMAN_SEAT ? 'self-row' : ''}>
+                      <td>{seatName(i)}</td>
+                      <td className={t > 0 ? 'pos' : t < 0 ? 'neg' : ''}>
+                        {t > 0 ? '+' : ''}
+                        {t}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            {match && match.finished && <MatchSummary match={match} />}
             <div data-testid="divergence-list" className="divergence-list">
               <b>关键分歧点（{divergences.length}）</b>
               {divergences.length === 0 && <p className="muted">本局没有明显偏离 AI 建议的出牌。</p>}
@@ -604,13 +861,28 @@ export default function Play() {
                 </div>
               ))}
             </div>
-            <button
-              className="primary"
-              data-testid="new-game"
-              onClick={() => navigate('/play', { replace: true, state: { autostart: true } })}
-            >
-              再来一局
-            </button>
+            {match && !match.finished ? (
+              <button className="primary" data-testid="match-next" onClick={() => void startMatchHand()}>
+                下一局：{seatName(match.dealer)}坐庄{match.dealerStreak > 1 ? `（连庄 ${match.dealerStreak}）` : ''}
+              </button>
+            ) : match && match.finished ? (
+              <div className="resume-actions">
+                <button className="primary" data-testid="match-again" onClick={() => void startNewMatch()}>
+                  再来一圈
+                </button>
+                <button data-testid="new-game" onClick={() => navigate('/play', { replace: true, state: { autostart: true } })}>
+                  开单局
+                </button>
+              </div>
+            ) : (
+              <button
+                className="primary"
+                data-testid="new-game"
+                onClick={() => navigate('/play', { replace: true, state: { autostart: true } })}
+              >
+                再来一局
+              </button>
+            )}
           </div>
         </div>
       )}

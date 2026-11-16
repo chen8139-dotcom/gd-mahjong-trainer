@@ -7,6 +7,7 @@ import {
 } from './memory-repository';
 import type {
   GameMeta,
+  MatchRecord,
   Mistake,
   QuizProgress,
   Repository,
@@ -26,6 +27,7 @@ interface MahjongDB extends DBSchema {
   };
   quiz: { key: string; value: QuizProgress };
   mistakes: { key: string; value: Mistake };
+  matches: { key: string; value: MatchRecord };
 }
 
 export interface RepositoryWithPersistence extends Repository {
@@ -33,19 +35,25 @@ export interface RepositoryWithPersistence extends Repository {
 }
 
 const DB_NAME = 'gd-mahjong-trainer';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export async function createLocalRepository(dbName = DB_NAME): Promise<RepositoryWithPersistence> {
   let db: IDBPDatabase<MahjongDB>;
   try {
     db = await openDB<MahjongDB>(dbName, DB_VERSION, {
-      upgrade(d) {
-        d.createObjectStore('settings');
-        d.createObjectStore('games', { keyPath: 'id' });
-        const snaps = d.createObjectStore('snapshots', { keyPath: ['gameId', 'seq'] });
-        snaps.createIndex('by-game', 'gameId');
-        d.createObjectStore('quiz', { keyPath: 'chapterId' });
-        d.createObjectStore('mistakes', { keyPath: 'id' });
+      upgrade(d, oldVersion) {
+        // 分段守卫：v1 库升级时只补建 v2 新增的 store，不重建既有数据
+        if (oldVersion < 1) {
+          d.createObjectStore('settings');
+          d.createObjectStore('games', { keyPath: 'id' });
+          const snaps = d.createObjectStore('snapshots', { keyPath: ['gameId', 'seq'] });
+          snaps.createIndex('by-game', 'gameId');
+          d.createObjectStore('quiz', { keyPath: 'chapterId' });
+          d.createObjectStore('mistakes', { keyPath: 'id' });
+        }
+        if (oldVersion < 2) {
+          d.createObjectStore('matches', { keyPath: 'id' });
+        }
       },
     });
   } catch {
@@ -87,6 +95,21 @@ export async function createLocalRepository(dbName = DB_NAME): Promise<Repositor
       const rows = await db.getAllFromIndex('snapshots', 'by-game', gameId);
       return rows.map((r) => ({ seq: r.seq, json: r.json })).sort((a, b) => a.seq - b.seq);
     },
+    async getActiveMatch(): Promise<MatchRecord | null> {
+      const all = await db.getAll('matches');
+      const active = all
+        .filter((m) => !m.finished)
+        .sort((a, b) => b.createdAt - a.createdAt)[0];
+      return active ? structuredClone(active) : null;
+    },
+    async saveMatch(m: MatchRecord): Promise<void> {
+      await db.put('matches', structuredClone(m));
+    },
+    async abandonActiveMatch(): Promise<void> {
+      const active = await this.getActiveMatch();
+      if (!active) return;
+      await db.put('matches', { ...active, finished: true, abandoned: true, finishedAt: Date.now() });
+    },
     async getQuizProgress(chapterId: string): Promise<QuizProgress | null> {
       return (await db.get('quiz', chapterId)) ?? null;
     },
@@ -111,6 +134,7 @@ export async function createLocalRepository(dbName = DB_NAME): Promise<Repositor
         snapshots: await db.getAll('snapshots'),
         quiz: await db.getAll('quiz'),
         mistakes: await db.getAll('mistakes'),
+        matches: await db.getAll('matches'),
       };
       return JSON.stringify(dump);
     },
@@ -122,6 +146,7 @@ export async function createLocalRepository(dbName = DB_NAME): Promise<Repositor
         snapshots?: (SnapshotEntry & { gameId: string })[];
         quiz?: QuizProgress[];
         mistakes?: Mistake[];
+        matches?: MatchRecord[];
       };
       try {
         dump = JSON.parse(json);
@@ -129,19 +154,21 @@ export async function createLocalRepository(dbName = DB_NAME): Promise<Repositor
         throw new Error('备份文件不是合法 JSON');
       }
       if (dump.v !== 1 || !Array.isArray(dump.games)) throw new Error('备份版本不支持');
-      const tx = db.transaction(['settings', 'games', 'snapshots', 'quiz', 'mistakes'], 'readwrite');
+      const tx = db.transaction(['settings', 'games', 'snapshots', 'quiz', 'mistakes', 'matches'], 'readwrite');
       if (mode === 'replace') {
         await tx.objectStore('games').clear();
         await tx.objectStore('snapshots').clear();
         await tx.objectStore('quiz').clear();
         await tx.objectStore('mistakes').clear();
         await tx.objectStore('settings').clear();
+        await tx.objectStore('matches').clear();
       }
       if (dump.settings) await tx.objectStore('settings').put(dump.settings, 'app');
       for (const g of dump.games) await tx.objectStore('games').put(g);
       for (const s of dump.snapshots ?? []) await tx.objectStore('snapshots').put(s);
       for (const q of dump.quiz ?? []) await tx.objectStore('quiz').put(q);
       for (const m of dump.mistakes ?? []) await tx.objectStore('mistakes').put(m);
+      for (const m of dump.matches ?? []) await tx.objectStore('matches').put(m);
       await tx.done;
     },
   };

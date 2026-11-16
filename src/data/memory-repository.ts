@@ -1,6 +1,7 @@
 // 内存实现：隐私模式降级方案 + 单元测试替身（设计文档·错误处理「降级」项）。
 import type {
   GameMeta,
+  MatchRecord,
   Mistake,
   QuizProgress,
   Repository,
@@ -15,6 +16,7 @@ interface Dump {
   snapshots: Record<string, SnapshotEntry[]>;
   quiz: Record<string, QuizProgress>;
   mistakes: Mistake[];
+  matches?: MatchRecord[];
 }
 
 export class MemoryRepository implements Repository {
@@ -23,6 +25,7 @@ export class MemoryRepository implements Repository {
   private snapshots = new Map<string, SnapshotEntry[]>();
   private quiz = new Map<string, QuizProgress>();
   private mistakes = new Map<string, Mistake>();
+  private matches = new Map<string, MatchRecord>();
 
   async getSettings(): Promise<Settings | null> {
     return this.settings ? { ...this.settings } : null;
@@ -61,6 +64,23 @@ export class MemoryRepository implements Repository {
     return (this.snapshots.get(gameId) ?? []).map((e) => ({ ...e }));
   }
 
+  async getActiveMatch(): Promise<MatchRecord | null> {
+    const active = [...this.matches.values()]
+      .filter((m) => !m.finished)
+      .sort((a, b) => b.createdAt - a.createdAt)[0];
+    return active ? structuredClone(active) : null;
+  }
+
+  async saveMatch(m: MatchRecord): Promise<void> {
+    this.matches.set(m.id, structuredClone(m));
+  }
+
+  async abandonActiveMatch(): Promise<void> {
+    const active = await this.getActiveMatch();
+    if (!active) return;
+    this.matches.set(active.id, { ...active, finished: true, abandoned: true, finishedAt: Date.now() });
+  }
+
   async getQuizProgress(chapterId: string): Promise<QuizProgress | null> {
     const p = this.quiz.get(chapterId);
     return p ? { ...p, doneQuestionIds: [...p.doneQuestionIds], correctIds: [...p.correctIds] } : null;
@@ -90,6 +110,7 @@ export class MemoryRepository implements Repository {
       snapshots: Object.fromEntries(this.snapshots),
       quiz: Object.fromEntries(this.quiz),
       mistakes: [...this.mistakes.values()],
+      matches: [...this.matches.values()],
     };
     return JSON.stringify(dump);
   }
@@ -107,6 +128,7 @@ export class MemoryRepository implements Repository {
       this.snapshots.clear();
       this.quiz.clear();
       this.mistakes.clear();
+      this.matches.clear();
       this.settings = null;
     }
     if (dump.settings) this.settings = { ...dump.settings };
@@ -119,5 +141,6 @@ export class MemoryRepository implements Repository {
     }
     for (const [k, v] of Object.entries(dump.quiz ?? {})) this.quiz.set(k, { ...v });
     for (const m of dump.mistakes ?? []) this.mistakes.set(m.id, { ...m });
+    for (const m of dump.matches ?? []) this.matches.set(m.id, structuredClone(m));
   }
 }

@@ -49,6 +49,44 @@ export interface SnapshotEntry {
   json: string;
 }
 
+/** 一圈内已完成的一局（delta 快照，用于圈总结算展示）。 */
+export interface MatchHandRecord {
+  gameId: string;
+  handNo: number;
+  /** 本局庄家座位 */
+  dealer: number;
+  /** 本局是该庄家的第几庄（1 = 首庄） */
+  dealerStreak: number;
+  type: 'win' | 'draw';
+  winner: number | null;
+  selfDraw: boolean;
+  fanTotal: number | null;
+  /** 本局四家分数变动（与 GameResult.deltas 同源） */
+  deltas: number[];
+}
+
+/** 一圈（match）对局进度记录（推进/连庄/收圈行为见 src/app/match.ts）。同一时刻至多一条未完成。 */
+export interface MatchRecord {
+  v: 1;
+  id: string;
+  rulesetId: string;
+  baseSeed: number;
+  /** 下一局编号（含连庄局，从 1 起） */
+  handNo: number;
+  /** 下一局庄家座位 */
+  dealer: number;
+  /** 下一局庄家的连庄序号（1 = 首庄） */
+  dealerStreak: number;
+  /** 四家累计分（座位序） */
+  totals: number[];
+  hands: MatchHandRecord[];
+  finished: boolean;
+  /** 被新对局/新圈取代而中途废弃（不再续打，仅存档） */
+  abandoned?: boolean;
+  createdAt: number;
+  finishedAt: number | null;
+}
+
 export interface Repository {
   // 设置
   getSettings(): Promise<Settings | null>;
@@ -60,6 +98,11 @@ export interface Repository {
   listGames(limit?: number): Promise<GameMeta[]>;
   appendSnapshot(gameId: string, seq: number, snapshotJson: string): Promise<void>;
   loadSnapshots(gameId: string): Promise<SnapshotEntry[]>;
+
+  // 一圈（match）进度：同一时刻至多一条未完成；saveMatch 为 upsert
+  getActiveMatch(): Promise<MatchRecord | null>;
+  saveMatch(m: MatchRecord): Promise<void>;
+  abandonActiveMatch(): Promise<void>;
 
   // 练习进度与错题本
   getQuizProgress(chapterId: string): Promise<QuizProgress | null>;

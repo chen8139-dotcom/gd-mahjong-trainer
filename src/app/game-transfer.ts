@@ -50,7 +50,8 @@ const phaseLine = (s: GameState): string => {
 export function summarizeState(state: GameState): string {
   const rs = getRuleset(state.rulesetId);
   const lines: string[] = [
-    `流派：${rs.name} · 东风局`,
+    // 庄家轮转（打一圈）后「东风局」不再恒真，按实际庄家座位表述
+    `流派：${rs.name} · ${WIND_NAMES[state.dealer]}家坐庄`,
     `进度：第 ${state.discardCount} 巡 · 牌墙余 ${state.wall.length} 张 · 步序 seq=${state.snapshotSeq} · seed=${state.seed}`,
     `局面：${phaseLine(state)}`,
     '手牌（含各家暗牌，仅调试/续打用）：',
