@@ -5,6 +5,17 @@ import { toCounts, fromCounts, type TileId } from '../../src/domain/tiles';
 import { performance } from 'node:perf_hooks';
 
 describe('calculate 计算服务', () => {
+  it('自摸鸡听牌按自摸计番并满足起胡', () => {
+    const out = calculate({
+      hand: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'p1', 'p2', 'z5', 'z5'],
+      melded: [], seen: [], rulesetId: 'zimoji',
+    });
+    const fan = out.fans.find((f) => f.tile === 'p3')?.fan;
+    expect(fan).not.toBe('cannotWin');
+    if (!fan || fan === 'cannotWin') throw new Error('未得到胡牌番数');
+    expect(fan.total).toBe(2);
+    expect(fan.matched.some((y) => y.yakuId === 'zimo')).toBe(true);
+  });
   it('听牌枚举 + 剩余张数 + 番数预估（推倒胡）', () => {
     const out = calculate({
       hand: ['m1', 'm2', 'm3', 'm4', 'm5', 'm6', 'm7', 'm8', 'm9', 'p1', 'p2', 'z5', 'z5'],

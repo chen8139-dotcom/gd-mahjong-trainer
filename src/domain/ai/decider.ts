@@ -4,7 +4,7 @@
 import { evalDiscards, scoreOf, type DiscardEval } from './efficiency';
 import { tileDanger } from './defense';
 import type { AiTier, Decision, DecisionReason, Difficulty } from './types';
-import type { PlayerView } from '../game-types';
+import type { GameAction, PlayerView } from '../game-types';
 import type { Ruleset } from '../rulesets/types';
 import { legalActions, shantenOf, canWin, listWaits } from '../engine';
 import type { WinContext } from '../yaku';
@@ -56,13 +56,31 @@ function gangDecisionOf(view: PlayerView, ruleset: Ruleset, bestShantenAfter: nu
   const hand = toCounts(view.hand);
   const melds = view.melds[view.seat];
 
+  if (view.wildcards?.length) {
+    const options = legalActions(view, ruleset).filter((a) => a.type === 'anGang' || a.type === 'buGang');
+    let best: { action: GameAction; shanten: number } | null = null;
+    for (const action of options) {
+      if (action.type !== 'anGang' && action.type !== 'buGang') continue;
+      const tiles = action.type === 'anGang' ? (action.tiles ?? [action.tile, action.tile, action.tile, action.tile]) : [action.tile];
+      for (const tile of tiles) hand[tileIdToIndex(tile)]--;
+      const count = melds.length + (action.type === 'anGang' ? 1 : 0);
+      const shanten = shantenOf(hand, count, ruleset, view.wildcards);
+      const dead = shanten === 0 && listWaits(hand, count, view.seenCounts, ruleset, view.wildcards).length === 0;
+      for (const tile of tiles) hand[tileIdToIndex(tile)]++;
+      if (!dead && shanten <= bestShantenAfter && (!best || shanten < best.shanten)) best = { action, shanten };
+    }
+    if (best) return { action: best.action, score: bestScore + 1, confidence: 0.9,
+      reasons: [{ kind: 'claim', text: '杠后保持或改善向听，并可补摸', data: { shanten: best.shanten } }] };
+    return null;
+  }
+
   const tryKong = (t: number, anGang: boolean): Decision | null => {
     const remove = anGang ? 4 : 1;
     const meldedAfter = melds.length + (anGang ? 1 : 0); // 补杠升级已有碰，副露数不变
     hand[t] -= remove;
-    const shantenAfter = shantenOf(hand, meldedAfter, ruleset);
+    const shantenAfter = shantenOf(hand, meldedAfter, ruleset, view.wildcards);
     const dead =
-      shantenAfter === 0 && listWaits(hand, meldedAfter, view.seenCounts, ruleset).length === 0;
+      shantenAfter === 0 && listWaits(hand, meldedAfter, view.seenCounts, ruleset, view.wildcards).length === 0;
     hand[t] += remove;
     if (shantenAfter > bestShantenAfter || dead) return null;
     const tile = indexToTileId(t);
@@ -99,7 +117,7 @@ function gangDecisionOf(view: PlayerView, ruleset: Ruleset, bestShantenAfter: nu
 function decideDiscard(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset): Decision {
   // 自摸已胡：直接胡（v1 不做默胡策略）
   const flags: WinContext['flags'] = {};
-  if (canWin(toCounts(view.hand), { ruleset, melded: view.melds[view.seat], selfDraw: true, menqing: view.melds[view.seat].length === 0, flags })) {
+  if (canWin(toCounts(view.hand), { ruleset, wildcards: view.wildcards, melded: view.melds[view.seat], selfDraw: true, menqing: view.melds[view.seat].length === 0, flags })) {
     return {
       action: { type: 'win', selfDraw: true },
       score: 1000,
@@ -165,7 +183,22 @@ function decideClaim(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset)
   const t = tileIdToIndex(tile);
   const hand = toCounts(view.hand);
   const melds = view.melds[view.seat].length;
-  const curShanten = shantenOf(hand, melds, ruleset);
+  const curShanten = shantenOf(hand, melds, ruleset, view.wildcards);
+
+  if (view.wildcards?.length) {
+    let best: { action: GameAction; after: number } | null = null;
+    for (const action of actions) {
+      if (action.type !== 'peng' && action.type !== 'mingGang') continue;
+      const tiles = action.tiles ?? Array(action.type === 'peng' ? 2 : 3).fill(tile) as TileId[];
+      for (const used of tiles) hand[tileIdToIndex(used)]--;
+      const after = shantenOf(hand, melds + 1, ruleset, view.wildcards);
+      for (const used of tiles) hand[tileIdToIndex(used)]++;
+      if ((action.type === 'mingGang' || after < curShanten) && (!best || after < best.after)) best = { action, after };
+    }
+    if (best) return { action: best.action, score: 100 + (curShanten - best.after) * 100, confidence: 0.8,
+      reasons: [{ kind: 'claim', text: `选择副露方案，向听变为 ${best.after}`, data: { before: curShanten, after: best.after } }] };
+    return { action: { type: 'pass' }, score: 0, confidence: 1, reasons: [{ kind: 'claim', text: '宣称不降低向听，跳过' }] };
+  }
 
   const gang = actions.find((a) => a.type === 'mingGang');
   if (gang) {
@@ -188,7 +221,7 @@ function decideClaim(view: PlayerView, difficulty: Difficulty, ruleset: Ruleset)
     } else if (claim.type === 'chi') {
       for (const x of claim.tiles) hand[tileIdToIndex(x)]--; // 手中的搭子两张进副露
     }
-    const after = shantenOf(hand, melds + 1, ruleset);
+    const after = shantenOf(hand, melds + 1, ruleset, view.wildcards);
     if (after < curShanten) {
       return {
         action: claim,

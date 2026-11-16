@@ -14,7 +14,7 @@ import TilePicker from '../components/TilePicker';
 const FULL_HAND = 13;
 
 export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: string }) {
-  const [rulesetId, setRulesetId] = useState(rulesetIdProp ?? 'tuidaohu');
+  const [rulesetId, setRulesetId] = useState(rulesetIdProp ?? 'zimoji');
   const [hand, setHand] = useState<TileId[]>([]);
   const [seen, setSeen] = useState<TileId[]>([]);
   const [melds, setMelds] = useState<MeldRef[]>([]);
@@ -212,6 +212,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
               {r.name}
             </option>
           ))}
+          {!BUILTIN_RULESETS.some((r) => r.id === rulesetId) && <option value={rulesetId}>历史对局规则</option>}
         </select>
       </label>
 

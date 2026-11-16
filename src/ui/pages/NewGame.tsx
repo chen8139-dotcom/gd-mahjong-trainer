@@ -14,15 +14,18 @@ export const DIFF_NAMES: Record<Difficulty, string> = { novice: '新手（纯效
  *  仅当「开始对局」确认时才标记废弃；随后写回全局设置（本次选择同时成为下次默认），
  *  /play 用免询问路径自动开局（replace 进历史，避免对局中后退误入本页二次确认）。
  *  选自摸鸡时可勾选「打一圈」：庄家轮转连打（庄家胡/流局连庄），一圈结束累计四家积分。 */
-export default function NewGame() {
+/** 配置组件已预留，待鬼牌整体验收后再开放给用户。 */
+export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?: boolean }) {
   const navigate = useNavigate();
   const [params] = useSearchParams();
   const [base, setBase] = useState<Settings>(DEFAULT_SETTINGS);
-  const [rulesetId, setRulesetId] = useState(base.rulesetId);
+  const rulesetId = 'zimoji';
   const [difficulty, setDifficulty] = useState<Difficulty>(base.difficulty);
   const [hintEnabled, setHintEnabled] = useState(base.hintEnabled);
   const [circle, setCircle] = useState(false);
+  const [wildcardCount, setWildcardCount] = useState<0 | 1 | 2 | 3>(0);
   const [starting, setStarting] = useState(false);
+  const [ready, setReady] = useState(false);
   // 进页时捕获的进行中对局（id + 摘要）；确认开始时若它仍是 ongoing 才废弃
   const [ongoing, setOngoing] = useState<{ gameId: string; summary: string } | null>(null);
   // 进页时捕获的未完成一圈；确认开始时废弃（单局/新圈都会取代它）
@@ -34,7 +37,6 @@ export default function NewGame() {
       const s = await repo.getSettings();
       if (s) {
         setBase(s);
-        setRulesetId(s.rulesetId);
         setDifficulty(s.difficulty);
         setHintEnabled(s.hintEnabled);
       }
@@ -55,6 +57,7 @@ export default function NewGame() {
       }
       const m = await repo.getActiveMatch();
       if (m) setOngoingMatch({ handNo: m.handNo });
+      setReady(true);
     })();
   }, []);
 
@@ -71,7 +74,7 @@ export default function NewGame() {
     // 透传来源查询串（如 E2E 的 ?seed=42）：确定性开局不受配置页往返影响；打一圈追加 match=1
     const search = new URLSearchParams(params);
     if (circle) search.set('match', '1');
-    navigate({ pathname: '/play', search: search.toString() }, { replace: true, state: { autostart: true } });
+    navigate({ pathname: '/play', search: search.toString() }, { replace: true, state: { autostart: true, wildcardCount: wildcardEnabled ? wildcardCount : 0 } });
   };
 
   return (
@@ -81,7 +84,7 @@ export default function NewGame() {
           🀄 <span>麻将陪练</span>
         </div>
         <h2>新对局</h2>
-        <p className="new-game-sub">选好流派与难度后开始；这些选择会记为默认设置。</p>
+        <p className="new-game-sub">自摸鸡 · 选好难度后开始；这些选择会记为默认设置。</p>
         {ongoing && (
           <p className="new-game-hint" data-testid="new-game-abandon-note">
             ⚠️ 确认开始后将放弃当前进行中的对局（{ongoing.summary}）
@@ -95,7 +98,20 @@ export default function NewGame() {
           </p>
         )}
         <div className="new-game-options">
-          <RulesetPicker selected={rulesetId} onChange={setRulesetId} prefix="new-game" />
+          {wildcardEnabled && (
+            <label className="option-card">
+              <b>鬼牌种数</b>
+              <select disabled={!ready} value={wildcardCount} data-testid="new-game-wildcards"
+                onChange={(event) => setWildcardCount(Number(event.target.value) as 0 | 1 | 2 | 3)}>
+                <option value={0}>关闭</option>
+                <option value={1}>1 种</option>
+                <option value={2}>2 种</option>
+                <option value={3}>3 种</option>
+              </select>
+              <small>每种牌的四张都是鬼牌，每局随机指定。</small>
+            </label>
+          )}
+          <RulesetPicker selected={rulesetId} onChange={() => undefined} prefix="new-game" />
         </div>
 
         <div className="new-game-options">
@@ -103,6 +119,7 @@ export default function NewGame() {
             <label className="option-card option-card-check">
               <input
                 type="checkbox"
+                disabled={!ready}
                 checked={circle}
                 onChange={(e) => setCircle(e.target.checked)}
                 data-testid="new-game-circle"
@@ -117,6 +134,7 @@ export default function NewGame() {
           <label className="option-card">
             <b>AI 难度</b>
             <select
+              disabled={!ready}
               value={difficulty}
               onChange={(e) => setDifficulty(e.target.value as Difficulty)}
               data-testid="new-game-difficulty"
@@ -132,6 +150,7 @@ export default function NewGame() {
           <label className="option-card option-card-check">
             <input
               type="checkbox"
+              disabled={!ready}
               checked={hintEnabled}
               onChange={(e) => setHintEnabled(e.target.checked)}
               data-testid="new-game-hint"
@@ -150,7 +169,7 @@ export default function NewGame() {
               返回
             </button>
           )}
-          <button className="primary" data-testid="new-game-confirm" disabled={starting} onClick={() => void confirm()}>
+          <button className="primary" data-testid="new-game-confirm" disabled={starting || !ready} onClick={() => void confirm()}>
             {starting ? '正在开局…' : '开始对局'}
           </button>
         </div>

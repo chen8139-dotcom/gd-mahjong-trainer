@@ -46,8 +46,8 @@ async function startMatchHandAt(repo: Repository, m: MatchState): Promise<Sessio
 }
 
 /** 新开一圈（废弃旧圈由调用方负责）。 */
-function makeNewMatch(rulesetId: string, baseSeed: number): MatchState {
-  return newMatch(crypto.randomUUID(), rulesetId, baseSeed, Date.now());
+function makeNewMatch(rulesetId: string, baseSeed: number, wildcardCount: 0 | 1 | 2 | 3 = 0): MatchState {
+  return newMatch(crypto.randomUUID(), rulesetId, baseSeed, Date.now(), wildcardCount);
 }
 
 /** 一圈内已完成各局的紧凑列表（圈面板与总结算共用）。 */
@@ -172,7 +172,10 @@ export default function Play() {
   // ?match=1：显式新开一圈（新对局页勾选「打一圈」跳转 / E2E 直达），旧圈废弃
   const startMatch = params.get('match') === '1';
   // 配置页「开始对局」/结算「再来一局」带 autostart 标记回跳：无进行中对局时免询问直接开局
-  const autostart = (location.state as { autostart?: boolean } | null)?.autostart === true;
+  const startOptions = location.state as { autostart?: boolean; wildcardCount?: unknown } | null;
+  const autostart = startOptions?.autostart === true;
+  const requestedWildcards = startOptions?.wildcardCount;
+  const wildcardCount: 0 | 1 | 2 | 3 = requestedWildcards === 1 || requestedWildcards === 2 || requestedWildcards === 3 ? requestedWildcards : 0;
 
   // 开一圈的下一手（圈未完时有效）：庄家与种子来自圈进度；清空教练提示与分歧点
   const startMatchHand = useCallback(async (): Promise<void> => {
@@ -189,7 +192,7 @@ export default function Play() {
   const startNewMatch = useCallback(async (): Promise<void> => {
     const repo = await getRepository();
     await repo.abandonActiveMatch();
-    const m = makeNewMatch(matchRef.current?.rulesetId ?? 'zimoji', Date.now() % 100000);
+    const m = makeNewMatch(matchRef.current?.rulesetId ?? 'zimoji', Date.now() % 100000, matchRef.current?.wildcardCount ?? 0);
     await repo.saveMatch(m);
     setMatch(m);
     matchRef.current = m; // 落库间隙同步引用，startMatchHandAt 后续渲染才到来
@@ -241,7 +244,7 @@ export default function Play() {
           m = active;
         } else {
           await repo.abandonActiveMatch();
-          m = makeNewMatch(s?.rulesetId ?? 'zimoji', Number(seed ?? Date.now() % 100000));
+          m = makeNewMatch('zimoji', Number(seed ?? Date.now() % 100000), wildcardCount);
           await repo.saveMatch(m);
         }
       } else {
@@ -272,9 +275,9 @@ export default function Play() {
       // 开局：一圈模式下种子/庄家来自圈进度（新圈首手或续打下一手），单局走原逻辑
       const state = newGame({
         seed: m ? handSeed(m) : Number(seed ?? Date.now() % 100000),
-        rulesetId: m ? m.rulesetId : s?.rulesetId ?? 'tuidaohu',
+        rulesetId: m ? m.rulesetId : 'zimoji',
         dealer: m ? m.dealer : undefined,
-        wildcardCount: m?.wildcardCount ?? 0,
+        wildcardCount: m ? m.wildcardCount ?? 0 : wildcardCount,
       });
       const gameId = crypto.randomUUID();
       await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
@@ -282,7 +285,7 @@ export default function Play() {
       setMatch(m);
       setSession({ gameId, state });
     })();
-  }, [autoMode, autostart, seed, startMatch, navigate]);
+  }, [autoMode, autostart, seed, startMatch, navigate, wildcardCount]);
 
   const resume = useCallback(async (accept: boolean) => {
     const repo = await getRepository();
@@ -341,7 +344,7 @@ export default function Play() {
   }, []);
 
   const persistFinish = useCallback((state: GameState): void => {
-    const outcome = state.result?.type === 'win' ? (state.result.winner === HUMAN_SEAT ? 'win' : 'loss') : 'draw';
+    const outcome = state.result?.type === 'win' ? ((state.result.winners?.some((w) => w.seat === HUMAN_SEAT) ?? (state.result.winner === HUMAN_SEAT)) ? 'win' : 'loss') : 'draw';
     void getRepository()
       .then((repo) => {
         if (!session) throw new Error('no session');
@@ -378,6 +381,16 @@ export default function Play() {
       return () => clearTimeout(timer);
     }
     if (st.phase === 'claims') {
+      if (st.pendingBuGang) {
+        const eligible = st.pendingBuGang.eligible ?? [0, 1, 2, 3].filter((candidate) => candidate !== st.lastDiscard?.from && legalActions(playerView(st, candidate), rs).some((action) => action.type === 'win'));
+        const seat = eligible.find((candidate) => !st.pendingBuGang?.decisions?.[candidate] && (autoMode || candidate !== HUMAN_SEAT));
+        if (seat === undefined) return;
+        const timer = setTimeout(() => {
+          const action = decide(playerView(st, seat), difficulty, rs).action;
+          setSession(step(session, action.type === 'win' ? action : { type: 'pass' }, seat));
+        }, 150);
+        return () => clearTimeout(timer);
+      }
       // 自动模式：四个座位都由 AI 决策；否则 AI 家决策 + 人类可宣称时等待操作
       const seatsToAsk = [0, 1, 2, 3].filter((x) => x !== st.lastDiscard!.from && (autoMode || x !== HUMAN_SEAT));
       const humanClaims = !autoMode && st.lastDiscard!.from !== HUMAN_SEAT ? legalActions(human, rs) : [];
@@ -795,21 +808,22 @@ export default function Play() {
               <>
                 <h3 className="result-title win">
                   {result.selfDraw ? '自摸胡' : '荣胡'} ·{' '}
-                  {result.winner === HUMAN_SEAT ? '你' : `${WIND_NAMES[result.winner ?? 0]}家`}
-                  {' '}· {result.fan?.total ?? 0} 番
+                  {(result.winners ?? (result.winner !== null && result.fan ? [{ seat: result.winner, fan: result.fan }] : [])).map((w) => `${seatName(w.seat)} ${w.fan.total} 番`).join('、')}
                 </h3>
-                {result.fan && (
-                  <div className="fan-chips">
-                    {result.fan.matched.map((m) => (
+                {(result.winners ?? (result.winner !== null && result.fan ? [{ seat: result.winner, fan: result.fan }] : [])).map((winner) => (
+                  <div className="fan-chips" key={winner.seat}>
+                    <span>{seatName(winner.seat)}</span>
+                    {winner.fan.matched.map((m) => (
                       <span key={m.yakuId} className="fan-chip">
                         {m.name} {m.fan}番
                       </span>
                     ))}
-                    <span className="fan-chip total">合计 {result.fan.total} 番</span>
+                    <span className="fan-chip total">合计 {winner.fan.total} 番</span>
+                    {!!winner.fan.wildcardAs?.length && <span className="fan-chip">鬼牌替代：{tileNames(winner.fan.wildcardAs)}</span>}
                   </div>
-                )}
+                ))}
                 <p className="muted">
-                  胡牌张：「{tileName(result.winTile ?? '')}」· {result.selfDraw ? '自摸' : '对手点炮'}
+                  胡牌张：「{tileName(result.winTile ?? '')}」· {result.selfDraw ? '自摸' : session.state.flags.qiangGang ? '抢杠' : '对手点炮'}
                 </p>
               </>
             )}
@@ -884,7 +898,7 @@ export default function Play() {
               <button
                 className="primary"
                 data-testid="new-game"
-                onClick={() => navigate('/play', { replace: true, state: { autostart: true } })}
+                onClick={() => navigate('/play', { replace: true, state: { autostart: true, wildcardCount: session.state.wildcards?.length ?? 0 } })}
               >
                 再来一局
               </button>

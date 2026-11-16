@@ -31,14 +31,14 @@ test('开新局 → 新对局配置页选流派开局；旧局废弃不再出现
   // 开新局进入配置页：默认预填当前设置；顶部提示将放弃的旧局（此时旧局仍是 ongoing）
   await page.getByTestId('resume-no').click();
   await expect(page.getByTestId('new-game')).toBeVisible();
-  await expect(page.getByTestId('new-game-radio-tuidaohu')).toBeChecked();
-  await expect(page.getByTestId('new-game-abandon-note')).toContainText('推倒胡 · 第');
+  await expect(page.getByTestId('new-game-radio-zimoji')).toBeChecked();
+  await expect(page.getByTestId('new-game-abandon-note')).toContainText('自摸鸡 · 第');
 
   // 反悔路径：点「返回」回到恢复询问，旧局原样重现（未被废弃）
   await page.getByTestId('new-game-back').click();
   const dialog = page.getByTestId('resume-dialog');
   await expect(dialog).toBeVisible({ timeout: 10_000 });
-  await expect(dialog).toContainText('推倒胡 · 第');
+  await expect(dialog).toContainText('自摸鸡 · 第');
 
   // 再次开新局 → 配置页 → 换流派 + 难度 → 确认开始（此时才废弃旧局）
   await page.getByTestId('resume-no').click();

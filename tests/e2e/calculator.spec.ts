@@ -16,7 +16,7 @@ test('计算器：摆 13 张 → 听牌面板 → 已见扣减 → 清空（SC-6
 
   await expect(page.getByTestId('calc-wait-p3')).toBeVisible();
   await expect(page.getByTestId('calc-result')).toContainText('剩 4 张');
-  await expect(page.getByTestId('calc-result')).toContainText('合计 1 番');
+  await expect(page.getByTestId('calc-result')).toContainText('合计 2 番');
 
   // 记录对手弃牌 p3 → 剩余张数 3
   await page.getByTestId('mode-seen').click();
@@ -29,14 +29,13 @@ test('计算器：摆 13 张 → 听牌面板 → 已见扣减 → 清空（SC-6
   await expect(page.getByTestId('calc-result')).not.toContainText('合计');
 });
 
-test('鸡平胡流派切换后起胡提示出现', async ({ page }) => {
+test('计算器只提供自摸鸡，并以自摸计算番数', async ({ page }) => {
   await completeFirstRun(page);
   await page.goto('/calculator');
-  await page.getByTestId('ruleset-select').selectOption('jipinghu');
-  for (const t of HAND13) {
-    await page.getByTestId(`pick-${t}`).click();
-  }
-  await expect(page.getByTestId('calc-hint')).toContainText('不满足 3 番起胡');
+  await expect(page.getByTestId('ruleset-select').locator('option')).toHaveCount(1);
+  await expect(page.getByTestId('ruleset-select')).toHaveValue('zimoji');
+  for (const t of HAND13) await page.getByTestId(`pick-${t}`).click();
+  await expect(page.getByTestId('calc-result')).toContainText('合计 2 番');
 });
 
 test('从当前对局加载：手牌/已见与牌桌一致并直接出听牌结果', async ({ page }) => {
@@ -63,7 +62,7 @@ test('从当前对局加载：手牌/已见与牌桌一致并直接出听牌结�
   await expect(page.getByTestId('calc-load-note')).toContainText(`余 ${wall} 张`);
 
   // 流派随对局切换、手牌 13 张、已见牌非空（有真实弃牌）
-  await expect(page.getByTestId('ruleset-select')).toHaveValue('tuidaohu');
+  await expect(page.getByTestId('ruleset-select')).toHaveValue('zimoji');
   await expect(page.getByTestId('hand-tray').locator('.tile-face')).toHaveCount(13);
   await expect(page.getByTestId('seen-tray').locator('.tile-face').first()).toBeVisible();
 

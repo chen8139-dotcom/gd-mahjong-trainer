@@ -8,6 +8,8 @@ import {
 } from './agari';
 import { YAKU_PREDICATES, type WinContext } from './yaku';
 import type { YakuDef } from './rulesets/types';
+import { wildcardDecompositions, wildcardShape } from './wildcard';
+import { indexToTileId, tileIdToIndex, type TileId } from './tiles';
 
 export interface MatchedYaku {
   yakuId: string;
@@ -21,6 +23,8 @@ export interface FanResult {
   form: 'standard' | 'chiitoi' | 'kokushi';
   matched: MatchedYaku[];
   decomp?: Decomposition;
+  /** 鬼牌依次代表的逻辑牌面。 */
+  wildcardAs?: TileId[];
 }
 
 export type WinEvaluation =
@@ -58,12 +62,14 @@ function resolveStacking(defs: YakuDef[]): YakuDef[] {
 
 export function evaluateWin(counts14: number[], ctx: WinContext): WinEvaluation {
   const rs = ctx.ruleset;
+  const wildIndices = new Set((ctx.wildcards ?? []).map(tileIdToIndex));
+  const hasWild = [...wildIndices].some((i) => counts14[i] > 0);
   type Cand = { form: FanResult['form']; decomp?: Decomposition; specialWhen: string | null };
   const cands: Cand[] = [];
   if (rs.forms.standard) {
-    for (const decomp of decomposeStandard(counts14)) cands.push({ form: 'standard', decomp, specialWhen: null });
+    for (const decomp of hasWild ? wildcardDecompositions(counts14, ctx.wildcards ?? [], ctx.melded.length) : decomposeStandard(counts14)) cands.push({ form: 'standard', decomp, specialWhen: null });
   }
-  if (rs.forms.chiitoi && isChiitoiShape(counts14)) cands.push({ form: 'chiitoi', specialWhen: 'chiitoi' });
+  if (rs.forms.chiitoi && (hasWild ? wildcardShape(counts14, ctx.wildcards ?? [], ctx.melded.length).chiitoi : isChiitoiShape(counts14))) cands.push({ form: 'chiitoi', specialWhen: 'chiitoi' });
   if (rs.forms.kokushi && isKokushiShape(counts14)) cands.push({ form: 'kokushi', specialWhen: 'shisanyao' });
   if (cands.length === 0) return { cannotWin: true, reason: 'no-shape' };
 
@@ -106,6 +112,24 @@ export function evaluateWin(counts14: number[], ctx: WinContext): WinEvaluation 
           matched: kept.map((d) => ({ yakuId: d.id, name: d.name, fan: d.fan })),
           decomp: c.decomp,
         };
+        if (hasWild && c.decomp) {
+          const natural = counts14.map((n, i) => wildIndices.has(i) ? 0 : n);
+          const logical = [c.decomp.pair, c.decomp.pair, ...c.decomp.sets.flat()];
+          best.wildcardAs = logical.filter((tile) => {
+            const i = tileIdToIndex(tile);
+            if (natural[i] > 0) { natural[i]--; return false; }
+            return true;
+          });
+        } else if (hasWild && c.form === 'chiitoi') {
+          const natural = counts14.map((n, i) => wildIndices.has(i) ? 0 : n);
+          const replacements: TileId[] = [];
+          for (let i = 0; i < 34; i++) if (natural[i] === 1) replacements.push(indexToTileId(i));
+          const needed = [...wildIndices].reduce((n, i) => n + counts14[i], 0);
+          for (let i = 0; replacements.length < needed && i < 34; i++) {
+            if (natural[i] === 0) replacements.push(indexToTileId(i), indexToTileId(i));
+          }
+          best.wildcardAs = replacements;
+        }
         bestRaw = rawTotal;
       }
     } else {

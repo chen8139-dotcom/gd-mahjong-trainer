@@ -52,7 +52,7 @@ export function generateDiscardQuiz(seed: number, difficulty: Difficulty = 'expe
       return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
   })();
-  const ruleset = getRuleset('tuidaohu');
+  const ruleset = getRuleset('zimoji');
   const hand = randomHand(rng);
   const handIds = fromCounts(hand);
   const seen = hand.slice();
@@ -67,7 +67,7 @@ export function generateDiscardQuiz(seed: number, difficulty: Difficulty = 'expe
     wallCount: 40,
     dealer: 0,
     drawnTile: handIds[handIds.length - 1],
-    rulesetId: 'tuidaohu',
+    rulesetId: 'zimoji',
   };
   const d = decide(view, difficulty, ruleset);
   if (d.action.type !== 'discard') return null;

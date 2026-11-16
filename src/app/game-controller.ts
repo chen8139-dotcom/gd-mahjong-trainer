@@ -58,7 +58,7 @@ export interface GameState {
   drawnTile: TileId | null;
   lastDiscard: LastDiscard | null;
   /** 抢杠宣称窗（robKong 流派）：补杠暂缓结算，该牌仍持有于 seat 手中（守恒不变），等待他人抢杠或过 */
-  pendingBuGang?: { seat: number; tile: TileId; target?: TileId };
+  pendingBuGang?: { seat: number; tile: TileId; target?: TileId; eligible?: number[]; decisions?: Record<number, 'win' | 'pass'> };
   flags: GameFlags;
   result: GameResult | null;
   discardCount: number;
@@ -168,6 +168,7 @@ function settleWin(s: GameState, winner: number, fan: FanResult, selfDraw: boole
 function winContext(s: GameState, seat: number, selfDraw: boolean): WinContext {
   return {
     ruleset: getRuleset(s.rulesetId),
+    wildcards: s.wildcards,
     melded: s.melds[seat],
     selfDraw,
     menqing: s.melds[seat].length === 0,
@@ -181,22 +182,24 @@ function winContext(s: GameState, seat: number, selfDraw: boolean): WinContext {
 }
 
 /** 抢杠候选预检：是否有其他座位可胡该补杠张。flags 只带 qiangGang——不透传残留的 gangKai 等历史标记 */
-function robCandidateExists(s: GameState, from: number, tileIndex: number): boolean {
+function robCandidates(s: GameState, from: number, tileIndex: number): number[] {
   const ruleset = getRuleset(s.rulesetId);
+  const candidates: number[] = [];
   for (let seat = 0; seat < 4; seat++) {
     if (seat === from) continue;
     const counts = s.hands[seat].slice();
     counts[tileIndex]++;
     const fan = evaluateWin(counts, {
       ruleset,
+      wildcards: s.wildcards,
       melded: s.melds[seat],
       selfDraw: false,
       menqing: s.melds[seat].length === 0,
       flags: { qiangGang: true },
     });
-    if (!('cannotWin' in fan)) return true;
+    if (!('cannotWin' in fan)) candidates.push(seat);
   }
-  return false;
+  return candidates;
 }
 
 /** claimant：宣称者座位（action 阶段固定为 turn，claims 阶段由驱动方传入） */
@@ -245,9 +248,10 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         const target = action.target ?? action.tile;
         const meld = s.melds[s.turn].find((m) => m.type === 'peng' && (m.target ?? m.tiles[0]) === target);
         if (!meld || s.hands[s.turn][t] < 1 || (action.tile !== target && !s.wildcards?.includes(action.tile))) throw new MahjongError('ILLEGAL_KONG', `无可补杠的 ${action.tile}`);
-        if (ruleset.robKong && robCandidateExists(s, s.turn, t)) {
+        const candidates = ruleset.robKong ? robCandidates(s, s.turn, t) : [];
+        if (candidates.length) {
           // 抢杠宣称窗：牌留在手中、副露保持 peng（守恒不变），等待他人抢杠或过
-          s.pendingBuGang = { seat: s.turn, tile: action.tile, ...(target !== action.tile ? { target } : {}) };
+          s.pendingBuGang = { seat: s.turn, tile: action.tile, ...(target !== action.tile ? { target } : {}), eligible: candidates, decisions: {} };
           s.lastDiscard = { tile: action.tile, from: s.turn };
           s.drawnTile = null;
           s.phase = 'claims';
@@ -278,35 +282,48 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
       if (action.type !== 'pass' && action.type !== 'win') {
         throw new MahjongError('WRONG_PHASE_ACTION', `抢杠宣称窗仅可胡或过，不支持 ${action.type}`);
       }
-      if (action.type === 'pass') {
-        const target = s.pendingBuGang.target ?? tile;
-        const meld = s.melds[from].find((m) => m.type === 'peng' && (m.target ?? m.tiles[0]) === target);
-        if (!meld) throw new MahjongError('ILLEGAL_KONG', '抢杠窗状态损坏：原碰副露丢失');
-        s.hands[from][t]--;
-        meld.type = 'buGang';
-        meld.tiles.push(tile);
-        s.pendingBuGang = undefined;
-        s.lastDiscard = null;
-        s.turn = from;
-        s.phase = 'action';
-        drawTo(s, from, true);
+      const pending = s.pendingBuGang;
+      const eligible = pending.eligible ?? robCandidates(s, from, t);
+      const decisions = pending.decisions ?? {};
+      if (!eligible.includes(claimant) || decisions[claimant]) {
+        throw new MahjongError('ILLEGAL_CLAIM', '当前玩家不能重复或越权宣称抢杠');
+      }
+      decisions[claimant] = action.type;
+      pending.eligible = eligible;
+      pending.decisions = decisions;
+      if (eligible.some((seat) => !decisions[seat])) {
         s.snapshotSeq++;
         return s;
       }
-      // 抢杠荣胡：selfDrawOnly 的唯一例外；flags 只带 qiangGang（不透传残留 gangKai 等历史标记）
-      if (claimant === from) throw new MahjongError('ILLEGAL_CLAIM', '不可抢自己的补杠');
-      const counts = s.hands[claimant].slice();
-      counts[t]++;
-      const fan = evaluateWin(counts, {
-        ruleset,
-        melded: s.melds[claimant],
-        selfDraw: false,
-        menqing: s.melds[claimant].length === 0,
-        flags: { qiangGang: true },
+      const winners = eligible.filter((seat) => decisions[seat] === 'win').map((seat) => {
+        const counts = s.hands[seat].slice();
+        counts[t]++;
+        const fan = evaluateWin(counts, {
+          ruleset, wildcards: s.wildcards, melded: s.melds[seat], selfDraw: false,
+          menqing: s.melds[seat].length === 0, flags: { qiangGang: true },
+        });
+        if ('cannotWin' in fan) throw new MahjongError('ILLEGAL_WIN', '未构成胡形', fan.reason);
+        return { seat, fan };
       });
-      if ('cannotWin' in fan) throw new MahjongError('ILLEGAL_WIN', '未构成胡形', fan.reason);
-      s.flags = { ...s.flags, qiangGang: true };
-      settleWin(s, claimant, fan, false, tile); // 被抢者（from）独付
+      if (winners.length) {
+        const deltas = [0, 0, 0, 0];
+        for (const winner of winners) {
+          deltas[winner.seat] += winner.fan.total;
+          deltas[from] -= winner.fan.total;
+        }
+        s.flags = { ...s.flags, qiangGang: true };
+        s.result = { type: 'win', winner: winners[0].seat, fan: winners[0].fan, winners,
+          winTile: tile, selfDraw: false, deltas };
+        s.phase = 'over'; s.lastDiscard = null; s.drawnTile = null;
+      } else {
+        const target = pending.target ?? tile;
+        const meld = s.melds[from].find((m) => m.type === 'peng' && (m.target ?? m.tiles[0]) === target);
+        if (!meld) throw new MahjongError('ILLEGAL_KONG', '抢杠窗状态损坏：原碰副露丢失');
+        s.hands[from][t]--;
+        meld.type = 'buGang'; meld.tiles.push(tile);
+        s.lastDiscard = null; s.turn = from; s.phase = 'action';
+        drawTo(s, from, true);
+      }
       s.pendingBuGang = undefined;
       s.snapshotSeq++;
       return s;
@@ -433,6 +450,14 @@ export function autoStep(state: GameState, decideFor: (view: PlayerView) => Deci
   }
   if (state.phase === 'claims' && state.lastDiscard) {
     const from = state.lastDiscard.from;
+    if (state.pendingBuGang) {
+      const pending = state.pendingBuGang;
+      const eligible = pending.eligible ?? robCandidates(state, from, tileIdToIndex(pending.tile));
+      const seat = eligible.find((candidate) => !pending.decisions?.[candidate]);
+      if (seat === undefined) throw new MahjongError('ILLEGAL_CLAIM', '抢杠宣称状态损坏');
+      const action = decideFor(playerView(state, seat)).action;
+      return applyAction(state, action.type === 'win' ? action : { type: 'pass' }, seat);
+    }
     let best: { priority: number; seat: number; action: GameAction } | null = null;
     for (let seat = 0; seat < 4; seat++) {
       if (seat === from) continue;

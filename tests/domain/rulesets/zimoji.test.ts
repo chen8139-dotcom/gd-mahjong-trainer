@@ -50,17 +50,64 @@ describe('自摸鸡流派元数据', () => {
     expect(rs.robKong).toBe(true);
     expect(rs.startingFan).toBe(2);
     expect(rs.capFan).toBe(8);
-    expect(BUILTIN_RULESETS).toHaveLength(4);
+    expect(BUILTIN_RULESETS.map((r) => r.id)).toEqual(['zimoji']);
+    expect(getRuleset('tuidaohu').id).toBe('tuidaohu'); // 旧对局仍可读取
     expect(rs.yaku.some((y) => y.id === 'qianggang')).toBe(true);
   });
 });
 
 describe('抢杠宣称窗（robKong）', () => {
+  it('两家抢杠时等待双方选择并由被抢者分别赔付', () => {
+    let s = robScenario('zimoji');
+    s.hands[2] = handOf(['s1','s2','s3','s4','s5','s6','s7','s8','s9','p6','p7','z1','z1']);
+    s.hands[3] = new Array<number>(34).fill(0);
+    rebuildWall(s);
+    s = applyAction(s, { type: 'buGang', tile: 'p5' });
+    expect(s.pendingBuGang?.eligible).toEqual([1, 2]);
+    s = applyAction(s, { type: 'win', selfDraw: false }, 1);
+    expect(s.result).toBeNull();
+    expect(s.pendingBuGang?.decisions).toEqual({ 1: 'win' });
+    s = deserializeSnapshot(serializeSnapshot(s));
+    s = applyAction(s, { type: 'win', selfDraw: false }, 2);
+    expect(s.result?.winners?.map((winner) => winner.seat)).toEqual([1, 2]);
+    expect(s.result?.deltas[0]).toBe(-((s.result?.deltas[1] ?? 0) + (s.result?.deltas[2] ?? 0)));
+    expect(s.result?.deltas[3]).toBe(0);
+    assertTileConservation(s);
+  });
+  it('两家抢杠均过时最后一人过后才补杠', () => {
+    let s = robScenario('zimoji');
+    s.hands[2] = handOf(['s1','s2','s3','s4','s5','s6','s7','s8','s9','p6','p7','z1','z1']);
+    s.hands[3] = new Array<number>(34).fill(0);
+    rebuildWall(s);
+    s = applyAction(s, { type: 'buGang', tile: 'p5' });
+    s = applyAction(s, { type: 'pass' }, 1);
+    expect(s.phase).toBe('claims');
+    expect(() => applyAction(s, { type: 'pass' }, 1)).toThrow();
+    s = applyAction(s, { type: 'pass' }, 2);
+    expect(s.phase).toBe('action');
+    expect(s.melds[0][0].type).toBe('buGang');
+    assertTileConservation(s);
+  });
+  it('三家均可抢杠时支持部分放弃并结算其余赢家', () => {
+    let s = robScenario('zimoji');
+    s.hands[2] = handOf(['s1','s2','s3','s4','s5','s6','s7','s8','s9','p6','p7','z1','z1']);
+    s.hands[3] = handOf(['p9','p9','p9','s1','s2','s3','m7','m8','m9','p3','p4','z3','z3']);
+    rebuildWall(s);
+    s = applyAction(s, { type: 'buGang', tile: 'p5' });
+    expect(s.pendingBuGang?.eligible).toEqual([1, 2, 3]);
+    s = applyAction(s, { type: 'win', selfDraw: false }, 1);
+    s = applyAction(s, { type: 'pass' }, 2);
+    expect(s.result).toBeNull();
+    s = applyAction(s, { type: 'win', selfDraw: false }, 3);
+    expect(s.result?.winners?.map((winner) => winner.seat)).toEqual([1, 3]);
+    expect(s.result?.deltas[2]).toBe(0);
+    assertTileConservation(s);
+  });
   it('有候选抢者：buGang 进窗，副露保持 peng，守恒成立', () => {
     const s = robScenario('zimoji');
     const next = applyAction(s, { type: 'buGang', tile: 'p5' });
     expect(next.phase).toBe('claims');
-    expect(next.pendingBuGang).toEqual({ seat: 0, tile: 'p5' });
+    expect(next.pendingBuGang).toEqual({ seat: 0, tile: 'p5', eligible: [1], decisions: {} });
     expect(next.lastDiscard).toEqual({ tile: 'p5', from: 0 });
     expect(next.melds[0][0].type).toBe('peng');
     expect(next.hands[0][IDX_P5]).toBe(1); // 牌仍在补杠者手中
@@ -108,7 +155,7 @@ describe('抢杠宣称窗（robKong）', () => {
   it('过：补杠完成并杠后摸牌（杠上开花标记置位）', () => {
     let s = robScenario('zimoji');
     s = applyAction(s, { type: 'buGang', tile: 'p5' });
-    s = applyAction(s, { type: 'pass' });
+    s = applyAction(s, { type: 'pass' }, 1);
     expect(s.phase).toBe('action');
     expect(s.turn).toBe(0); // 补杠者继续，不轮转
     expect(s.melds[0][0].type).toBe('buGang');

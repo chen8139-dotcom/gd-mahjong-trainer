@@ -22,11 +22,11 @@ export interface DiscardEvalDetail extends DiscardEval {
 const SHANTEN_CACHE_LIMIT = 300_000;
 const shantenCache = new Map<string, number>();
 
-function cachedShanten(counts: number[], meldedSets: number, ruleset: Ruleset): number {
-  const key = `${ruleset.id}|${meldedSets}|${counts.join(',')}`;
+function cachedShanten(counts: number[], meldedSets: number, ruleset: Ruleset, wildcards: readonly TileId[] = []): number {
+  const key = `${ruleset.id}|${meldedSets}|${wildcards.join(',')}|${counts.join(',')}`;
   let v = shantenCache.get(key);
   if (v === undefined) {
-    v = shantenOf(counts, meldedSets, ruleset);
+    v = shantenOf(counts, meldedSets, ruleset, wildcards);
     if (shantenCache.size >= SHANTEN_CACHE_LIMIT) shantenCache.clear();
     shantenCache.set(key, v);
   }
@@ -47,7 +47,7 @@ export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] 
   for (let t = 0; t < 34; t++) {
     if (hand[t] === 0) continue;
     hand[t]--;
-    results.push({ tile: indexToTileId(t), shantenAfter: cachedShanten(hand, meldedSets, ruleset), ukeireTiles: 0 });
+    results.push({ tile: indexToTileId(t), shantenAfter: cachedShanten(hand, meldedSets, ruleset, view.wildcards), ukeireTiles: 0 });
     hand[t]++;
   }
   const best = Math.min(...results.map((r) => r.shantenAfter));
@@ -75,7 +75,7 @@ export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] 
       const avail = 4 - seen[d];
       if (avail <= 0) continue;
       hand[d]++;
-      if (cachedShanten(hand, meldedSets, ruleset) < best) ukeire += avail;
+      if (cachedShanten(hand, meldedSets, ruleset, view.wildcards) < best) ukeire += avail;
       hand[d]--;
     }
     seen[t]++;
@@ -98,7 +98,7 @@ export function evalDiscardsAll(view: PlayerView, ruleset: Ruleset): DiscardEval
   for (let t = 0; t < 34; t++) {
     if (hand[t] === 0) continue;
     hand[t]--;
-    const shantenAfter = cachedShanten(hand, meldedSets, ruleset);
+    const shantenAfter = cachedShanten(hand, meldedSets, ruleset, view.wildcards);
     const sig = hand.join(',');
     hand[t]++;
     const item: DiscardEvalDetail = { tile: indexToTileId(t), shantenAfter, ukeireTiles: 0, ukeireDetail: [] };
@@ -121,7 +121,7 @@ export function evalDiscardsAll(view: PlayerView, ruleset: Ruleset): DiscardEval
       const avail = 4 - seen[d];
       if (avail <= 0) continue;
       hand[d]++;
-      if (cachedShanten(hand, meldedSets, ruleset) < rep.shantenAfter) {
+      if (cachedShanten(hand, meldedSets, ruleset, view.wildcards) < rep.shantenAfter) {
         ukeire += avail;
         detail.push({ tile: indexToTileId(d), remaining: avail });
       }

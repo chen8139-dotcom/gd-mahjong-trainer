@@ -4,7 +4,8 @@
 import { getRuleset } from '../domain/rulesets';
 import type { MeldRef } from '../domain/agari';
 import { fromCounts, tileIdToIndex } from '../domain/tiles';
-import { assertTileConservation, MahjongError, type GameState } from './game-controller';
+import { assertTileConservation, MahjongError, playerView, type GameState } from './game-controller';
+import { legalActions } from '../domain/engine';
 
 const WIND_NAMES = ['东', '南', '西', '北'];
 const MELD_NAMES: Record<MeldRef['type'], string> = { peng: '碰', chi: '吃', mingGang: '明杠', anGang: '暗杠', buGang: '补杠' };
@@ -32,6 +33,9 @@ const seatLabel = (seat: number, dealer: number): string => {
 const phaseLine = (s: GameState): string => {
   if (s.result) {
     if (s.result.type === 'draw') return '对局结束：流局（荒庄）';
+    if (s.result.winners && s.result.winners.length > 1) {
+      return `对局结束：${s.result.winners.map((w) => `${seatLabel(w.seat, s.dealer)} ${w.fan.total} 番`).join('、')} 抢杠胡（胡牌张 ${s.result.winTile ?? '?'}）`;
+    }
     const w = s.result.winner;
     const who = w === null ? '?' : seatLabel(w, s.dealer);
     return `对局结束：${who} ${s.result.selfDraw ? '自摸胡' : '荣胡'} ${s.result.fan?.total ?? 0} 番（胡牌张 ${s.result.winTile ?? '?'}）`;
@@ -157,6 +161,20 @@ export function importGame(json: string): GameState {
       throw new MahjongError('BAD_EXPORT', '抢杠窗状态非法');
     }
     if (st.phase !== 'claims') throw new MahjongError('BAD_EXPORT', '抢杠窗状态与对局阶段不符');
+    if (pb.eligible !== undefined) {
+      if (!Array.isArray(pb.eligible) || pb.eligible.length === 0 || new Set(pb.eligible).size !== pb.eligible.length ||
+          pb.eligible.some((seat) => !Number.isInteger(seat) || seat < 0 || seat > 3 || seat === pb.seat) ||
+          !st.lastDiscard || st.lastDiscard.from !== pb.seat || st.lastDiscard.tile !== pb.tile) {
+        throw new MahjongError('BAD_EXPORT', '抢杠候选状态非法');
+      }
+      if (pb.decisions !== undefined && (typeof pb.decisions !== 'object' || pb.decisions === null || Array.isArray(pb.decisions) ||
+          Object.entries(pb.decisions).some(([seat, decision]) => !/^[0-3]$/.test(seat) || !pb.eligible!.includes(Number(seat)) || !['win', 'pass'].includes(decision)) ||
+          pb.eligible.every((seat) => pb.decisions?.[seat] !== undefined))) {
+        throw new MahjongError('BAD_EXPORT', '抢杠选择状态非法');
+      }
+    } else if (pb.decisions !== undefined) {
+      throw new MahjongError('BAD_EXPORT', '抢杠选择缺少候选');
+    }
   }
   if (st.wildcards !== undefined) {
     if (!Array.isArray(st.wildcards) || st.wildcards.length > 3 ||
@@ -177,6 +195,22 @@ export function importGame(json: string): GameState {
     getRuleset(st.rulesetId);
   } catch {
     throw new MahjongError('BAD_EXPORT', `未知流派：${st.rulesetId}`);
+  }
+  if (st.pendingBuGang?.eligible) {
+    const pb = st.pendingBuGang;
+    try {
+      const tileIndex = tileIdToIndex(pb.tile);
+      const target = pb.target ?? pb.tile;
+      tileIdToIndex(target);
+      if (!st.hands[pb.seat][tileIndex] || (target !== pb.tile && !st.wildcards?.includes(pb.tile)) ||
+          !st.melds[pb.seat].some((m) => m.type === 'peng' && (m.target ?? m.tiles[0]) === target)) throw new Error('补杠状态不匹配');
+      const probe = { ...st, pendingBuGang: { seat: pb.seat, tile: pb.tile, target: pb.target } };
+      const actual = [0, 1, 2, 3].filter((seat) => seat !== pb.seat &&
+        legalActions(playerView(probe, seat), getRuleset(st.rulesetId), {}).some((action) => action.type === 'win'));
+      if (actual.length !== pb.eligible.length || actual.some((seat) => !pb.eligible!.includes(seat))) throw new Error('抢杠候选不匹配');
+    } catch (error) {
+      throw new MahjongError('BAD_EXPORT', '抢杠状态与手牌不匹配', error);
+    }
   }
   try {
     assertTileConservation(st);

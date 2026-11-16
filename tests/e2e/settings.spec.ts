@@ -2,12 +2,36 @@ import { test, expect } from '@playwright/test';
 import { completeFirstRun, expectAppReady } from './helpers';
 import fs from 'node:fs';
 
+test('旧设置不会让新局或学习页面切回旧流派', async ({ page }) => {
+  await completeFirstRun(page);
+  await page.evaluate(async () => {
+    await new Promise<void>((resolve, reject) => {
+      const request = indexedDB.open('gd-mahjong-trainer', 2);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const tx = request.result.transaction('settings', 'readwrite');
+        tx.objectStore('settings').put({ rulesetId: 'gangshi', difficulty: 'expert', hintEnabled: true, gamesUntilBackupHint: 20 }, 'app');
+        tx.oncomplete = () => { request.result.close(); resolve(); };
+        tx.onerror = () => reject(tx.error);
+      };
+    });
+  });
+  await page.goto('/play/new');
+  await expect(page.getByTestId('new-game-radio-zimoji')).toBeChecked();
+  await expect(page.locator('input[name="ruleset-new-game"]')).toHaveCount(1);
+  await expect(page.getByTestId('new-game-difficulty')).toHaveValue('expert');
+  await page.goto('/learn');
+  await expect(page.getByTestId('fan-table-body')).toContainText('自摸鸡');
+  await page.goto('/calculator');
+  await expect(page.getByTestId('ruleset-select')).toHaveValue('zimoji');
+});
+
 test('新对局页写回流派；设置页导出→清→导入一致（SC-9）', async ({ page }) => {
   await completeFirstRun(page);
 
   // 流派/难度在新对局配置页选择（写回全局设置作为下次默认）；设置页不再提供该入口
   await page.goto('/play/new');
-  await page.getByTestId('new-game-radio-gangshi').check();
+  await page.getByTestId('new-game-radio-zimoji').check();
   await page.getByTestId('new-game-confirm').click();
   await expect(page.getByTestId('play-page')).toBeVisible({ timeout: 15_000 });
 
@@ -39,5 +63,5 @@ test('新对局页写回流派；设置页导出→清→导入一致（SC-9）'
 
   // 持久化断言：写回的流派经新对局页预选态验证（设置页已无流派选择器）
   await page.goto('/play/new');
-  await expect(page.getByTestId('new-game-radio-gangshi')).toBeChecked();
+  await expect(page.getByTestId('new-game-radio-zimoji')).toBeChecked();
 });

@@ -10,7 +10,8 @@ import { tileName } from '../../domain/tiles';
 import type { Mistake } from '../../data/repository';
 import TileFace from '../components/TileFace';
 
-const BANK = bankJson as unknown as QuizQuestion[];
+// 不展示依赖其他流派的十三幺、点炮防守及旧番数题。
+const BANK = (bankJson as unknown as QuizQuestion[]).filter((q) => !['q004', 'q005', 'q006', 'q007', 'q011'].includes(q.id));
 
 const shorthandToIds = (s: string): string[] => {
   const ids: string[] = [];
@@ -90,7 +91,7 @@ type Tab = 'fan' | 'course' | 'quiz' | 'random' | 'mistakes';
 
 export default function Learn() {
   const [tab, setTab] = useState<Tab>('fan');
-  const [rulesetId, setRulesetId] = useState('tuidaohu');
+  const rulesetId = 'zimoji';
   const [courseIdx, setCourseIdx] = useState(0);
   const [quizIdx, setQuizIdx] = useState(0);
   const [randomSeed, setRandomSeed] = useState<number>(() => Date.now() % 100000);
@@ -100,8 +101,6 @@ export default function Learn() {
   useEffect(() => {
     void getRepository()
       .then(async (repo) => {
-        const s = await repo.getSettings();
-        if (s) setRulesetId(s.rulesetId);
         setMistakes(await repo.listMistakes());
       })
       .catch(() => undefined);

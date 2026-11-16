@@ -16,7 +16,7 @@ export interface Settings {
 
 /** 全局默认设置：各页面 fallback 统一引用，避免散落字面量各自漂移。 */
 export const DEFAULT_SETTINGS: Settings = {
-  rulesetId: 'tuidaohu',
+  rulesetId: 'zimoji',
   difficulty: 'intermediate',
   hintEnabled: true,
   gamesUntilBackupHint: 20,

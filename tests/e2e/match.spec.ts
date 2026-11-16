@@ -13,8 +13,6 @@ async function seedZimoji(page: Page, circle: boolean): Promise<void> {
 test('自摸鸡打一圈：入口仅自摸鸡显示，勾选后开局进入第 1 局', async ({ page }) => {
   await completeFirstRun(page);
   await page.goto('/play/new');
-  // 默认流派（推倒胡）无打一圈入口；选自摸鸡后出现
-  await expect(page.getByTestId('new-game-circle')).toHaveCount(0);
   await page.getByTestId('new-game-radio-zimoji').check();
   await expect(page.getByTestId('new-game-circle')).toBeVisible();
   await page.getByTestId('new-game-circle').check();

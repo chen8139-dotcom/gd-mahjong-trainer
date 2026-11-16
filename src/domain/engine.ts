@@ -4,11 +4,13 @@ import { evaluateWin, type FanResult } from './score';
 import type { WinContext } from './yaku';
 import type { Ruleset } from './rulesets/types';
 import type { GameAction, PlayerView } from './game-types';
-import { indexToTileId, tileIdToIndex, toCounts } from './tiles';
+import { indexToTileId, tileIdToIndex, toCounts, type TileId } from './tiles';
 import { wildcardMeldChoices } from './wildcard-meld';
+import { wildcardShanten } from './wildcard';
 
 /** 按 ruleset 启用的胡牌形取最小向听；-1 = 已构成胡形 */
-export function shantenOf(hand: number[], meldedSets: number, ruleset: Ruleset): number {
+export function shantenOf(hand: number[], meldedSets: number, ruleset: Ruleset, wildcards: readonly TileId[] = []): number {
+  if (wildcards.some((tile) => hand[tileIdToIndex(tile)] > 0)) return wildcardShanten(hand, wildcards, meldedSets, ruleset.forms.chiitoi);
   let best = Number.POSITIVE_INFINITY;
   if (ruleset.forms.standard) best = shantenStandard(hand, meldedSets);
   if (ruleset.forms.chiitoi && meldedSets === 0) best = Math.min(best, shantenChiitoi(hand));
@@ -27,12 +29,13 @@ export function listWaits(
   meldedSets: number,
   seenCounts: number[],
   ruleset: Ruleset,
+  wildcards: readonly TileId[] = [],
 ): Wait[] {
   const waits: Wait[] = [];
   for (let t = 0; t < 34; t++) {
     if (seenCounts[t] >= 4) continue;
     hand[t]++;
-    const s = shantenOf(hand, meldedSets, ruleset);
+    const s = shantenOf(hand, meldedSets, ruleset, wildcards);
     hand[t]--;
     if (s === -1) waits.push({ tile: indexToTileId(t), remaining: 4 - seenCounts[t] });
   }
@@ -47,6 +50,7 @@ export function canWin(counts14: number[], ctx: WinContext): FanResult | null {
 
 const winCtx = (view: PlayerView, ruleset: Ruleset, selfDraw: boolean, flags: WinContext['flags']): WinContext => ({
   ruleset,
+  wildcards: view.wildcards,
   melded: view.melds[view.seat],
   selfDraw,
   menqing: view.melds[view.seat].length === 0,
@@ -103,6 +107,7 @@ export function legalActions(
     if (!view.pendingBuGang && view.wildcards?.includes(tile)) return actions;
     // 抢杠宣称窗：只可胡（唯一荣胡例外）或过——该牌不在弃牌池，无碰/杠/吃
     if (view.pendingBuGang) {
+      if (view.pendingBuGang.decisions?.[view.seat] || (view.pendingBuGang.eligible && !view.pendingBuGang.eligible.includes(view.seat))) return actions;
       handCounts[t]++;
       if (canWin(handCounts, winCtx(view, ruleset, false, { qiangGang: true }))) {
         actions.push({ type: 'win', selfDraw: false, tile });

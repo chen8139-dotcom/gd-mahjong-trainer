@@ -45,7 +45,8 @@ export function calculate(input: CalcInput): CalcOutput {
     const fan = canWin(counts, {
       ruleset,
       melded: input.melded,
-      selfDraw: false,
+      // 仅自摸流派的普通听牌以自摸估番；旧流派保留原来的荣胡口径。
+      selfDraw: !!ruleset.selfDrawOnly,
       menqing: input.melded.length === 0,
       flags: {},
     });

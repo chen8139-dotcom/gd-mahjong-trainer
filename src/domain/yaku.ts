@@ -33,6 +33,8 @@ export type PredicateId = (typeof PREDICATE_IDS)[number];
 
 export interface WinContext {
   ruleset: Ruleset;
+  /** 本局的鬼牌牌种；缺省时沿用普通牌规则。 */
+  wildcards?: readonly TileId[];
   melded: MeldRef[];
   selfDraw: boolean;
   /** 无任何副露（暗杠不破门清） */

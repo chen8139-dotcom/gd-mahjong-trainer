@@ -17,7 +17,7 @@ test('对局导出→导入：跨会话恢复同一局面并继续可打', async
   // 导出：填备注 → 下载文件
   await exportBtn.click();
   await expect(page.getByTestId('export-dialog')).toBeVisible();
-  await expect(page.getByTestId('export-summary')).toContainText('推倒胡');
+  await expect(page.getByTestId('export-summary')).toContainText('自摸鸡');
   await page.getByTestId('export-note').fill('测试备注：这里 AI 防守有问题');
   const downloadPromise = page.waitForEvent('download');
   await page.getByTestId('export-download').click();
@@ -34,7 +34,7 @@ test('对局导出→导入：跨会话恢复同一局面并继续可打', async
   expect(doc.v).toBe(1);
   expect(doc.kind).toBe('game');
   expect(doc.note).toBe('测试备注：这里 AI 防守有问题');
-  expect(doc.summary).toContain('推倒胡');
+  expect(doc.summary).toContain('自摸鸡');
   expect(doc.state.seed).toBe(42);
   await page.getByTestId('dialog-close').click();
   await expect(page.getByTestId('export-dialog')).toHaveCount(0);
