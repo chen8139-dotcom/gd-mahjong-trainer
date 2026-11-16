@@ -83,6 +83,8 @@ export function legalActions(
   if (view.phase === 'claims' && view.lastDiscard) {
     const { tile, from } = view.lastDiscard;
     const t = tileIdToIndex(tile);
+    // 鬼牌弃牌不能宣称；补杠牌并非弃牌，仍可抢杠。
+    if (!view.pendingBuGang && view.wildcards?.includes(tile)) return actions;
     // 抢杠宣称窗：只可胡（唯一荣胡例外）或过——该牌不在弃牌池，无碰/杠/吃
     if (view.pendingBuGang) {
       handCounts[t]++;

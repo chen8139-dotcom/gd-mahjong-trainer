@@ -120,7 +120,7 @@ function SeatPanel({ state, seat, pos }: { state: GameState; seat: number; pos: 
           {state.melds[seat].map((m, i) => (
             <span key={i} className="meld">
               {m.tiles.map((t, j) => (
-                <TileFace key={j} tile={t} size="sm" />
+                <TileFace key={j} tile={t} size="sm" wildcard={state.wildcards?.includes(t)} />
               ))}
             </span>
           ))}
@@ -643,6 +643,9 @@ export default function Play() {
             <span className="muted">
               余 {session.state.wall.length} 张 · 第 {session.state.discardCount} 巡
             </span>
+            {!!session.state.wildcards?.length && (
+              <span data-testid="wildcard-list">鬼牌：{tileNames(session.state.wildcards)}</span>
+            )}
             {myTurn && !autoMode && (
               <span className="wall-tools">
                 <button data-testid="export-game-btn" onClick={openExport}>
@@ -670,7 +673,7 @@ export default function Play() {
               <span className="pool-label">{seat === HUMAN_SEAT ? '你' : `${WIND_NAMES[seat]}家`}</span>
               <div className="pool-tiles">
                 {session.state.discards[seat].map((t, i) => (
-                  <TileFace key={`${t}-${i}`} tile={t} size="sm" />
+                  <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={session.state.wildcards?.includes(t)} />
                 ))}
               </div>
             </div>
@@ -689,7 +692,7 @@ export default function Play() {
               {session.state.melds[HUMAN_SEAT].map((m, i) => (
                 <span key={i} className="meld">
                   {m.tiles.map((t, j) => (
-                    <TileFace key={j} tile={t} size="sm" />
+                    <TileFace key={j} tile={t} size="sm" wildcard={session.state.wildcards?.includes(t)} />
                   ))}
                 </span>
               ))}
@@ -761,6 +764,7 @@ export default function Play() {
                 <TileFace
                   key={`${t}-${i}`}
                   tile={t}
+                  wildcard={session.state.wildcards?.includes(t)}
                   testId={`hand-${t}`}
                   onClick={myTurn ? () => humanAct({ type: 'discard', tile: t }) : undefined}
                 />
@@ -769,6 +773,7 @@ export default function Play() {
                 <TileFace
                   key={`drawn-${drawnTile}`}
                   tile={drawnTile}
+                  wildcard={session.state.wildcards?.includes(drawnTile)}
                   highlight
                   testId={`hand-${drawnTile}`}
                   onClick={myTurn ? () => humanAct({ type: 'discard', tile: drawnTile }) : undefined}

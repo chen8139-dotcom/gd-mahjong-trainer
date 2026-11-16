@@ -36,4 +36,6 @@ export interface PlayerView {
   /** 抢杠宣称窗（robKong 流派）：补杠暂缓结算，该牌仍持有于 seat 手中，等待他人抢杠或过 */
   pendingBuGang?: { seat: number; tile: TileId };
   rulesetId: string;
+  /** 本局公开的鬼牌牌种。 */
+  wildcards?: TileId[];
 }

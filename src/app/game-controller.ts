@@ -13,6 +13,8 @@ export interface GameConfig {
   seed: number;
   rulesetId: string;
   dealer?: number;
+  /** 自摸鸡每局随机指定的鬼牌种数，缺省关闭。 */
+  wildcardCount?: 0 | 1 | 2 | 3;
 }
 
 export interface GameFlags {
@@ -38,6 +40,8 @@ export interface GameState {
   v: 1;
   seed: number;
   rulesetId: string;
+  /** 本局的鬼牌牌种；旧快照没有此字段时视为关闭。 */
+  wildcards?: TileId[];
   dealer: number;
   turn: number;
   phase: GamePhase;
@@ -72,6 +76,18 @@ export class MahjongError extends Error {
 const meldTileCount = (m: MeldRef): number => (m.type === 'peng' || m.type === 'chi' ? 3 : 4);
 
 export function newGame(cfg: GameConfig): GameState {
+  const wildcardCount = cfg.wildcardCount ?? 0;
+  if (!Number.isInteger(wildcardCount) || wildcardCount < 0 || wildcardCount > 3 || (wildcardCount > 0 && cfg.rulesetId !== 'zimoji')) {
+    throw new MahjongError('INVALID_WILDCARDS', '只有自摸鸡支持 0 至 3 种鬼牌');
+  }
+  // 单独的随机流不改变既有种子的洗牌结果。
+  const wildcardRng = mulberry32(cfg.seed ^ 0x5f3759df);
+  const candidates = Array.from({ length: 34 }, (_, i) => i);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(wildcardRng() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
+  const wildcards = candidates.slice(0, wildcardCount).map(indexToTileId);
   const rng = mulberry32(cfg.seed);
   const wall = buildWall(rng).map((t) => t.tileIndex);
   const hands = [0, 1, 2, 3].map(() => new Array<number>(34).fill(0));
@@ -90,6 +106,7 @@ export function newGame(cfg: GameConfig): GameState {
     v: 1,
     seed: cfg.seed,
     rulesetId: cfg.rulesetId,
+    wildcards,
     dealer,
     turn: dealer,
     phase: 'action',
@@ -187,7 +204,15 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
         s.lastDiscard = { tile: action.tile, from: s.turn };
         s.drawnTile = null;
         s.discardCount++;
-        s.phase = 'claims';
+        if (s.wildcards?.includes(action.tile)) {
+          // 鬼牌弃牌无人可碰、杠、胡，直接交给下家摸牌。
+          s.turn = (s.turn + 1) % 4;
+          s.lastDiscard = null;
+          s.phase = 'action';
+          drawTo(s, s.turn, false);
+        } else {
+          s.phase = 'claims';
+        }
         break;
       }
       case 'win': {
@@ -233,6 +258,9 @@ export function applyAction(state: GameState, action: GameAction, claimant = sta
     const from = s.lastDiscard.from;
     const tile = s.lastDiscard.tile;
     const t = tileIdToIndex(tile);
+    if (!s.pendingBuGang && s.wildcards?.includes(tile) && action.type !== 'pass') {
+      throw new MahjongError('ILLEGAL_CLAIM', '鬼牌弃牌不可碰、杠或胡');
+    }
     // 抢杠宣称窗：该牌不在弃牌池，只可胡（唯一荣胡例外）或过；碰/杠/吃一律拒绝
     if (s.pendingBuGang) {
       if (action.type !== 'pass' && action.type !== 'win') {
@@ -363,6 +391,7 @@ export function playerView(state: GameState, seat: number): PlayerView {
     lastDiscard: state.lastDiscard ?? undefined,
     pendingBuGang: state.pendingBuGang ? { ...state.pendingBuGang } : undefined,
     rulesetId: state.rulesetId,
+    wildcards: state.wildcards ?? [],
   };
 }
 

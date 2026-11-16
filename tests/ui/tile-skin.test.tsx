@@ -12,6 +12,15 @@ afterEach(() => {
 });
 
 describe('牌面皮肤', () => {
+  it('鬼牌在两种皮肤均有标记，普通牌无标记', () => {
+    const { container, rerender } = render(<TileFace tile="m1" wildcard />);
+    expect(container.querySelector('.tile-wildcard')).toBeTruthy();
+    expect(screen.getByLabelText('鬼牌')).toBeTruthy();
+    act(() => setTileSkin('default'));
+    expect(container.querySelector('.tile-wildcard')).toBeTruthy();
+    rerender(<TileFace tile="m1" />);
+    expect(container.querySelector('.tile-wildcard')).toBeNull();
+  });
   it('雀魂皮肤（默认）：渲染素材图 img，无自绘牌字', () => {
     expect(getTileSkin()).toBe('majsoul');
     const { container } = render(<TileFace tile="m1" />);

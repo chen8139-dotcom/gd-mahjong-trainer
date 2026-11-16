@@ -69,6 +69,7 @@ export default function TileFace({
   testId,
   badge,
   highlight = false,
+  wildcard = false,
 }: {
   tile: TileId;
   size?: 'sm' | 'md';
@@ -77,10 +78,11 @@ export default function TileFace({
   testId?: string;
   badge?: string | number;
   highlight?: boolean;
+  wildcard?: boolean;
 }) {
   const skin = useTileSkin();
   const suit = tile[0];
-  const cls = `tile-face tile-${size} tile-${suit} tile-skin-${skin}${highlight ? ' tile-drawn' : ''}`;
+  const cls = `tile-face tile-${size} tile-${suit} tile-skin-${skin}${highlight ? ' tile-drawn' : ''}${wildcard ? ' tile-wildcard' : ''}`;
   const isButton = !!onClick || disabled;
   const face =
     skin === 'majsoul' ? (
@@ -98,6 +100,7 @@ export default function TileFace({
     return (
       <button className={cls} onClick={onClick} disabled={disabled} data-testid={testId} type="button">
         {face}
+        {wildcard && <span className="tile-wildcard-badge" aria-label="鬼牌">鬼</span>}
         {badge !== undefined && <span className="tile-badge">{badge}</span>}
       </button>
     );
@@ -105,6 +108,7 @@ export default function TileFace({
   return (
     <span className={cls} data-testid={testId}>
       {face}
+      {wildcard && <span className="tile-wildcard-badge" aria-label="鬼牌">鬼</span>}
       {badge !== undefined && <span className="tile-badge">{badge}</span>}
     </span>
   );

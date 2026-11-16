@@ -3,7 +3,7 @@
 // 格式契约：v:1, kind:'game'，只增不改；同时兼容裸快照 {v:1, state}（repo 落库格式）。
 import { getRuleset } from '../domain/rulesets';
 import type { MeldRef } from '../domain/agari';
-import { fromCounts } from '../domain/tiles';
+import { fromCounts, tileIdToIndex } from '../domain/tiles';
 import { assertTileConservation, MahjongError, type GameState } from './game-controller';
 
 const WIND_NAMES = ['东', '南', '西', '北'];
@@ -157,6 +157,21 @@ export function importGame(json: string): GameState {
       throw new MahjongError('BAD_EXPORT', '抢杠窗状态非法');
     }
     if (st.phase !== 'claims') throw new MahjongError('BAD_EXPORT', '抢杠窗状态与对局阶段不符');
+  }
+  if (st.wildcards !== undefined) {
+    if (!Array.isArray(st.wildcards) || st.wildcards.length > 3 ||
+        new Set(st.wildcards).size !== st.wildcards.length ||
+        (st.wildcards.length > 0 && st.rulesetId !== 'zimoji')) {
+      throw new MahjongError('BAD_EXPORT', '鬼牌配置非法');
+    }
+    try {
+      for (const tile of st.wildcards) {
+        if (typeof tile !== 'string' || !/^[mps][1-9]$|^z[1-7]$/.test(tile)) throw new Error('invalid tile');
+        tileIdToIndex(tile);
+      }
+    } catch {
+      throw new MahjongError('BAD_EXPORT', '鬼牌牌种非法');
+    }
   }
   try {
     getRuleset(st.rulesetId);
