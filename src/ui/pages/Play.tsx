@@ -598,7 +598,7 @@ export default function Play() {
 
   if (resumeCandidate) {
     return (
-      <div className="page play-page resume-page" data-testid="resume-dialog">
+      <div className="page play-page resume-page felt-table" data-testid="resume-dialog">
         <div className="resume-panel">
           <div className="tile-backs resume-fan" aria-hidden="true">
             <span className="tile-back" />
@@ -623,7 +623,7 @@ export default function Play() {
   if (!session && match) {
     // 局间（圈进行中）或收圈后（无对局会话，如刷新）的圈面板：待开下一局或一圈总结算
     return (
-      <div className="page play-page resume-page" data-testid="match-panel">
+      <div className="page play-page resume-page felt-table" data-testid="match-panel">
         <div className="resume-panel">
           <h2>{match.finished ? '一圈结束' : `第 ${match.handNo} 局待开`}</h2>
           {!match.finished && (
@@ -682,7 +682,7 @@ export default function Play() {
   const gangActions = legal.filter((a) => a.type === 'anGang' || a.type === 'buGang');
 
   return (
-    <div className="page play-page table-page" data-testid="play-page">
+    <div className="page play-page table-page felt-table" data-testid="play-page">
       {error && <p className="calc-error">{error}</p>}
       <div className="table-grid">
         <div className="table-wall">

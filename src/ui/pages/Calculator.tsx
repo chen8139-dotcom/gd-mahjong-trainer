@@ -237,250 +237,269 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
   const doneTally = sim.status === 'done' ? sim.tally : null;
 
   return (
-    <div className="page">
-      <h2>听牌计算器</h2>
-      <label className="ruleset-row">
-        流派
-        <select value={rulesetId} onChange={(e) => onRulesetChange(e.target.value)} data-testid="ruleset-select">
-          {BUILTIN_RULESETS.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.name}
-            </option>
-          ))}
-          {!BUILTIN_RULESETS.some((r) => r.id === rulesetId) && <option value={rulesetId}>历史对局规则</option>}
-        </select>
-      </label>
+    <div className="page calculator-page felt-table">
+      <header className="calculator-header">
+        <h2>听牌计算器</h2>
+        <div className="calculator-tools">
+          <label className="ruleset-row">
+            流派
+            <select value={rulesetId} onChange={(e) => onRulesetChange(e.target.value)} data-testid="ruleset-select">
+              {BUILTIN_RULESETS.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                </option>
+              ))}
+              {!BUILTIN_RULESETS.some((r) => r.id === rulesetId) && <option value={rulesetId}>历史对局规则</option>}
+            </select>
+          </label>
+          <button
+            type="button"
+            className="calculator-button"
+            onClick={loadFromGame}
+            data-testid="calc-load-game"
+            disabled={hasOngoing === false}
+            title={hasOngoing === false ? '当前没有进行中的对局' : undefined}
+          >
+            从对局加载
+          </button>
+          <button type="button" className="calculator-button" onClick={clearAll} data-testid="calc-clear">
+            清空
+          </button>
+        </div>
+      </header>
 
-      <div className="mode-row">
-        <button
-          type="button"
-          className={mode === 'hand' ? 'active' : ''}
-          onClick={() => setMode('hand')}
-          data-testid="mode-hand"
-        >
-          摆手牌 {hand.length}/{handLimit}
-        </button>
-        <button
-          type="button"
-          className={mode === 'meld' ? 'active' : ''}
-          onClick={() => setMode('meld')}
-          data-testid="mode-meld"
-        >
-          副露 {melds.length}/4
-        </button>
-        <button
-          type="button"
-          className={mode === 'seen' ? 'active' : ''}
-          onClick={() => setMode('seen')}
-          data-testid="mode-seen"
-        >
-          记已见牌 {seen.length}
-        </button>
-        <button
-          type="button"
-          className={mode === 'wildcard' ? 'active' : ''}
-          onClick={() => setMode('wildcard')}
-          disabled={rulesetId !== 'zimoji'}
-          data-testid="mode-wildcard"
-        >
-          指定鬼牌 {wildcards.length}/3
-        </button>
-        <button
-          type="button"
-          onClick={loadFromGame}
-          data-testid="calc-load-game"
-          disabled={hasOngoing === false}
-          title={hasOngoing === false ? '当前没有进行中的对局' : undefined}
-        >
-          从对局加载
-        </button>
-        <button type="button" onClick={clearAll} data-testid="calc-clear">
-          清空
-        </button>
-      </div>
       {loadNote && (
-        <p className="muted load-note" data-testid="calc-load-note">
+        <p className="muted load-note" role="status" data-testid="calc-load-note">
           {loadNote}
         </p>
       )}
-      {mode === 'meld' && !wildcards.length && <p className="muted">点牌面记一副碰（3 张），再点同牌升级为杠；副露每多一组，手牌少摆 3 张。</p>}
-      {mode === 'wildcard' && <p className="muted">点牌面指定或取消鬼牌，最多 3 种；该种牌的四张均为鬼牌。</p>}
-      {mode === 'meld' && wildcards.length > 0 && <p className="muted">先选择碰杠的目标牌，再选择实际使用的牌。</p>}
 
-      <TilePicker
-        seenCounts={seenCounts}
-        handCounts={handCounts}
-        handLimit={mode === 'hand' ? handLimit : Number.MAX_SAFE_INTEGER}
-        handUsed={mode === 'hand' ? hand.length : 0}
-        onSelect={pick}
-        wildcards={wildcards}
-        choosingWildcards={mode === 'wildcard'}
-        choosingMeldTarget={mode === 'meld' && wildcards.length > 0}
-      />
-      {mode === 'meld' && meldTarget && wildcards.length > 0 && (
-        <div className="calc-result" data-testid="meld-choices">
-          <p>目标：{tileName(meldTarget)}，选择实际牌面：</p>
-          {meldChoices.length === 0 && <p>剩余牌不足以组成该副露。</p>}
-          {meldChoices.map((choice, index) => (
-            <button key={`${choice.type}-${index}`} type="button" data-testid="meld-choice"
-              onClick={() => { setMelds([...melds, { ...choice, target: meldTarget }]); setMeldTarget(null); }}>
-              {choice.type === 'peng' ? '碰' : '杠'}：{tileNames(choice.tiles)}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="calculator-layout">
+        <div className="calculator-input">
+          <section className="calculator-panel" aria-label="选牌">
+            <div className="mode-row" role="group" aria-label="选牌模式">
+              <button
+                type="button"
+                className={mode === 'hand' ? 'active' : ''}
+                aria-pressed={mode === 'hand'}
+                onClick={() => setMode('hand')}
+                data-testid="mode-hand"
+              >
+                摆手牌 {hand.length}/{handLimit}
+              </button>
+              <button
+                type="button"
+                className={mode === 'meld' ? 'active' : ''}
+                aria-pressed={mode === 'meld'}
+                onClick={() => setMode('meld')}
+                data-testid="mode-meld"
+              >
+                副露 {melds.length}/4
+              </button>
+              <button
+                type="button"
+                className={mode === 'seen' ? 'active' : ''}
+                aria-pressed={mode === 'seen'}
+                onClick={() => setMode('seen')}
+                data-testid="mode-seen"
+              >
+                记已见牌 {seen.length}
+              </button>
+              <button
+                type="button"
+                className={mode === 'wildcard' ? 'active' : ''}
+                aria-pressed={mode === 'wildcard'}
+                onClick={() => setMode('wildcard')}
+                disabled={rulesetId !== 'zimoji'}
+                data-testid="mode-wildcard"
+              >
+                指定鬼牌 {wildcards.length}/3
+              </button>
+            </div>
+            {mode === 'meld' && !wildcards.length && <p className="muted">点牌记碰，再点同一张可升级为杠。每增加一组副露，手牌少摆 3 张。</p>}
+            {mode === 'wildcard' && <p className="muted">点牌指定或取消鬼牌，最多 3 种。选中后，该种牌的四张均为鬼牌。</p>}
+            {mode === 'meld' && wildcards.length > 0 && <p className="muted">先选择碰杠的目标牌，再选择实际使用的牌。</p>}
 
-      <div className="tray">
-        <span>手牌</span>
-        <div className="tray-tiles" data-testid="hand-tray">
-          {hand.map((t, i) => (
-            <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={wildcards.includes(t)} testId={`hand-${t}`} onClick={() => removeAt(hand, setHand, i)} />
-          ))}
-          {hand.length === 0 && <span className="tray-empty">点击上方牌面摆入 {handLimit} 张</span>}
-        </div>
-      </div>
-      {melds.length > 0 && (
-        <div className="tray">
-          <span>副露</span>
-          <div className="tray-tiles" data-testid="meld-tray">
-            {melds.map((m, i) => (
-              <span key={i} className="meld">
-                {m.tiles.map((t, j) => (
-                  <TileFace key={j} tile={t} size="sm" wildcard={wildcards.includes(t)} />
+            <TilePicker
+              seenCounts={seenCounts}
+              handCounts={handCounts}
+              handLimit={mode === 'hand' ? handLimit : Number.MAX_SAFE_INTEGER}
+              handUsed={mode === 'hand' ? hand.length : 0}
+              onSelect={pick}
+              wildcards={wildcards}
+              choosingWildcards={mode === 'wildcard'}
+              choosingMeldTarget={mode === 'meld' && wildcards.length > 0}
+            />
+            {mode === 'meld' && meldTarget && wildcards.length > 0 && (
+              <div className="meld-choices" data-testid="meld-choices">
+                <p>目标：{tileName(meldTarget)}，选择实际牌面：</p>
+                {meldChoices.length === 0 && <p>剩余牌不足以组成该副露。</p>}
+                {meldChoices.map((choice, index) => (
+                  <button key={`${choice.type}-${index}`} type="button" className="calculator-button" data-testid="meld-choice"
+                    onClick={() => { setMelds([...melds, { ...choice, target: meldTarget }]); setMeldTarget(null); }}>
+                    {choice.type === 'peng' ? '碰' : '杠'}：{tileNames(choice.tiles)}
+                  </button>
                 ))}
-                {m.target && <small>当{tileName(m.target)}</small>}
-                <button className="meld-remove" data-testid={`meld-remove-${i}`} onClick={() => removeMeld(i)}>
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-      <div className="tray">
-        <span>已见</span>
-        <div className="tray-tiles" data-testid="seen-tray">
-          {seen.map((t, i) => (
-            <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={wildcards.includes(t)} testId={`seen-${t}`} onClick={() => removeAt(seen, setSeen, i)} />
-          ))}
-          {seen.length === 0 && <span className="tray-empty">记录对手弃牌等已见信息</span>}
-        </div>
-      </div>
-
-      <div className="calc-result" data-testid="calc-result">
-        {result && 'error' in result && <p className="calc-error">{result.error}</p>}
-        {result && !('error' in result) && (
-          <>
-            {result.waits.length === 0 && (
-              handLimit - hand.length > 0 ? (
-                <p>暂无听牌：请摆满 {handLimit} 张</p>
-              ) : analysis && analysis.candidates.length > 0 ? (
-                <div className="shanten-panel" data-testid="shanten-panel">
-                  <p className="shanten-head">当前 {analysis.shanten} 向听 —— 打哪张进张最宽：</p>
-                  {analysis.candidates.map((c) => (
-                    <div className="wait-row" key={c.tile} data-testid={`shanten-${c.tile}`}>
-                      <TileFace tile={c.tile} size="sm" />
-                      <span>
-                        打后 {c.shantenAfter} 向听 · 受入 {c.ukeireDetail.length} 种 {c.ukeireTiles} 张
-                        <span className="fan-detail">
-                          （{c.ukeireDetail.slice(0, 4).map((d) => `${d.tile}×${d.remaining}`).join(' ')}
-                          {c.ukeireDetail.length > 4 ? ' …' : ''}）
-                        </span>
-                      </span>
-                    </div>
+              </div>
+            )}
+          </section>
+          <section className="calculator-panel calculator-trays" aria-label="当前牌面">
+            <div className="tray">
+              <span>手牌</span>
+              <div className="tray-tiles" data-testid="hand-tray">
+                {hand.map((t, i) => (
+                  <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={wildcards.includes(t)} testId={`hand-${t}`} onClick={() => removeAt(hand, setHand, i)} />
+                ))}
+                {hand.length === 0 && <span className="tray-empty">点击上方牌面摆入 {handLimit} 张</span>}
+              </div>
+            </div>
+            {melds.length > 0 && (
+              <div className="tray">
+                <span>副露</span>
+                <div className="tray-tiles" data-testid="meld-tray">
+                  {melds.map((m, i) => (
+                    <span key={i} className="meld">
+                      {m.tiles.map((t, j) => (
+                        <TileFace key={j} tile={t} size="sm" wildcard={wildcards.includes(t)} />
+                      ))}
+                      {m.target && <small>当{tileName(m.target)}</small>}
+                      <button className="meld-remove" data-testid={`meld-remove-${i}`} onClick={() => removeMeld(i)}>
+                        ×
+                      </button>
+                    </span>
                   ))}
                 </div>
-              ) : (
-                <p>暂无听牌：当前牌型未听牌</p>
-              )
+              </div>
             )}
-            {result.waits.length > 0 && (
-              <p className="calc-summary" data-testid="calc-summary">
-                共听 {result.waits.length} 张，等牌合计剩{' '}
-                {result.waits.reduce((sum, w) => sum + w.remaining, 0)} 张
-              </p>
-            )}
-            {result.waits.map((w) => {
-              const fan = result.fans.find((f) => f.tile === w.tile)?.fan;
-              return (
-                <div className="wait-row" key={w.tile} data-testid={`calc-wait-${w.tile}`}>
-                  <TileFace tile={w.tile} size="sm" wildcard={wildcards.includes(w.tile)} />
-                  <span>
-                    剩 {w.remaining} 张
-                    {fan !== 'cannotWin' && (
-                      <span className="fan-detail">
-                        （{fan!.matched.map((m) => `${m.name} ${m.fan}番`).join(' + ')}，合计 {fan!.total} 番）
-                      </span>
-                    )}
-                    {fan === 'cannotWin' && <span className="fan-warn">（番数不足起胡）</span>}
-                  </span>
-                </div>
-              );
-            })}
-            {result.startingFanHint && (
-              <p className="calc-hint" data-testid="calc-hint">
-                {result.startingFanHint}
-              </p>
-            )}
-          </>
-        )}
-      </div>
+            <div className="tray">
+              <span>已见</span>
+              <div className="tray-tiles" data-testid="seen-tray">
+                {seen.map((t, i) => (
+                  <TileFace key={`${t}-${i}`} tile={t} size="sm" wildcard={wildcards.includes(t)} testId={`seen-${t}`} onClick={() => removeAt(seen, setSeen, i)} />
+                ))}
+                {seen.length === 0 && <span className="tray-empty">记录对手弃牌等已见信息</span>}
+              </div>
+            </div>
+          </section>
+        </div>
 
-      <div className="calc-result sim-panel" data-testid="sim-panel">
-        <p className="sim-head">胜率估算（粗估，仅供参考）</p>
-        {sim.status === 'idle' && (
-          <>
-            <button
-              type="button"
-              className="primary sim-run"
-              data-testid="calc-sim-run"
-              disabled={hand.length !== handLimit}
-              onClick={startSim}
-            >
-              模拟 {SIM_TRIALS} 局
-            </button>
-            {hand.length !== handLimit && <p className="muted">摆满 {handLimit} 张后可模拟（建议先用「从对局加载」）</p>}
-          </>
-        )}
-        {sim.status === 'running' && (
-          <div data-testid="calc-sim-progress">
-            <p className="muted">
-              模拟中 {sim.done}/{sim.total} 局…
-            </p>
-            <div className="sim-bar">
-              <div className="sim-bar-fill" style={{ width: `${sim.total > 0 ? (sim.done / sim.total) * 100 : 0}%` }} />
-            </div>
-          </div>
-        )}
-        {doneTally && (
-          <div data-testid="calc-sim-result">
-            <div className="sim-grid">
-              <div className="sim-cell sim-me">
-                <span>我先和份额</span>
-                <strong>{pct(doneTally.wins[0], doneTally.trials)}</strong>
-              </div>
-              {['南家', '西家', '北家'].map((name, i) => (
-                <div className="sim-cell" key={name}>
-                  <span>{name}</span>
-                  <strong>{pct(doneTally.wins[i + 1], doneTally.trials)}</strong>
+        <div className="calculator-output">
+          <section className="calculator-panel" data-testid="calc-result" aria-labelledby="calc-result-title">
+            <h3 id="calc-result-title">听牌分析</h3>
+            {!result && <p className="muted">摆满 {handLimit} 张手牌后查看分析</p>}
+            {result && 'error' in result && <p className="calc-error">{result.error}</p>}
+            {result && !('error' in result) && (
+              <>
+                {result.waits.length === 0 && (
+                  analysis && analysis.candidates.length > 0 ? (
+                    <div className="shanten-panel" data-testid="shanten-panel">
+                      <p className="shanten-head">当前 {analysis.shanten} 向听 —— 打哪张进张最宽：</p>
+                      {analysis.candidates.map((c) => (
+                        <div className="wait-row" key={c.tile} data-testid={`shanten-${c.tile}`}>
+                          <TileFace tile={c.tile} size="sm" />
+                          <span>
+                            打后 {c.shantenAfter} 向听 · 受入 {c.ukeireDetail.length} 种 {c.ukeireTiles} 张
+                            <span className="fan-detail">
+                              （{c.ukeireDetail.slice(0, 4).map((d) => `${d.tile}×${d.remaining}`).join(' ')}
+                              {c.ukeireDetail.length > 4 ? ' …' : ''}）
+                            </span>
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p>暂无听牌：当前牌型未听牌</p>
+                  )
+                )}
+                {result.waits.length > 0 && (
+                  <p className="calc-summary" data-testid="calc-summary">
+                    共听 {result.waits.length} 张，等牌合计剩{' '}
+                    {result.waits.reduce((sum, w) => sum + w.remaining, 0)} 张
+                  </p>
+                )}
+                {result.waits.map((w) => {
+                  const fan = result.fans.find((f) => f.tile === w.tile)?.fan;
+                  return (
+                    <div className="wait-row" key={w.tile} data-testid={`calc-wait-${w.tile}`}>
+                      <TileFace tile={w.tile} size="sm" wildcard={wildcards.includes(w.tile)} />
+                      <span>
+                        剩 {w.remaining} 张
+                        {fan !== 'cannotWin' && (
+                          <span className="fan-detail">
+                            （{fan!.matched.map((m) => `${m.name} ${m.fan}番`).join(' + ')}，合计 {fan!.total} 番）
+                          </span>
+                        )}
+                        {fan === 'cannotWin' && <span className="fan-warn">（番数不足起胡）</span>}
+                      </span>
+                    </div>
+                  );
+                })}
+                {result.startingFanHint && (
+                  <p className="calc-hint" data-testid="calc-hint">
+                    {result.startingFanHint}
+                  </p>
+                )}
+              </>
+            )}
+          </section>
+
+          <section className="calculator-panel" data-testid="sim-panel" aria-labelledby="calc-sim-title">
+            <h3 id="calc-sim-title">胜率估算 <small>粗估，仅供参考</small></h3>
+            {sim.status === 'idle' && (
+              <>
+                <button
+                  type="button"
+                  className="calculator-button calculator-button-gold"
+                  data-testid="calc-sim-run"
+                  disabled={hand.length !== handLimit}
+                  onClick={startSim}
+                >
+                  模拟 {SIM_TRIALS} 局
+                </button>
+                {hand.length !== handLimit && <p className="muted">摆满 {handLimit} 张后可模拟（建议先用「从对局加载」）</p>}
+              </>
+            )}
+            {sim.status === 'running' && (
+              <div data-testid="calc-sim-progress">
+                <p className="muted">
+                  模拟中 {sim.done}/{sim.total} 局…
+                </p>
+                <div className="sim-bar">
+                  <div className="sim-bar-fill" style={{ width: `${sim.total > 0 ? (sim.done / sim.total) * 100 : 0}%` }} />
                 </div>
-              ))}
-              <div className="sim-cell">
-                <span>到限未和</span>
-                <strong>{pct(doneTally.undecided, doneTally.trials)}</strong>
               </div>
-            </div>
-            <p className="muted" data-testid="calc-sim-note">
-              {doneTally.trials} 局 · 牌墙剩 {DEFAULT_HORIZON_WALL} 张（约 7 巡）为限 · 和牌局平均第{' '}
-              {doneTally.winCount > 0 ? Math.round(doneTally.winTurnSum / doneTally.winCount) : '—'} 巡
-              {simAttribution ? '' : ' · 他家弃牌归属为近似'} · 多人抢杠时平分该局胜利份额
-            </p>
-            <button type="button" onClick={startSim} data-testid="calc-sim-rerun">
-              再模拟一次
-            </button>
-          </div>
-        )}
-        {sim.status === 'error' && <p className="calc-error">模拟失败：{sim.message}</p>}
+            )}
+            {doneTally && (
+              <div data-testid="calc-sim-result">
+                <div className="sim-grid">
+                  <div className="sim-cell sim-me">
+                    <span>我先和份额</span>
+                    <strong>{pct(doneTally.wins[0], doneTally.trials)}</strong>
+                  </div>
+                  {['南家', '西家', '北家'].map((name, i) => (
+                    <div className="sim-cell" key={name}>
+                      <span>{name}</span>
+                      <strong>{pct(doneTally.wins[i + 1], doneTally.trials)}</strong>
+                    </div>
+                  ))}
+                  <div className="sim-cell">
+                    <span>到限未和</span>
+                    <strong>{pct(doneTally.undecided, doneTally.trials)}</strong>
+                  </div>
+                </div>
+                <p className="muted" data-testid="calc-sim-note">
+                  {doneTally.trials} 局 · 牌墙剩 {DEFAULT_HORIZON_WALL} 张（约 7 巡）为限 · 和牌局平均第{' '}
+                  {doneTally.winCount > 0 ? Math.round(doneTally.winTurnSum / doneTally.winCount) : '—'} 巡
+                  {simAttribution ? '' : ' · 他家弃牌归属为近似'} · 多人抢杠时平分该局胜利份额
+                </p>
+                <button type="button" className="calculator-button" onClick={startSim} data-testid="calc-sim-rerun">
+                  再模拟一次
+                </button>
+              </div>
+            )}
+            {sim.status === 'error' && <p className="calc-error">模拟失败：{sim.message}</p>}
+          </section>
+        </div>
       </div>
     </div>
   );
