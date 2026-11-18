@@ -254,7 +254,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
           </label>
           <button
             type="button"
-            className="calculator-button"
+            className="felt-control"
             onClick={loadFromGame}
             data-testid="calc-load-game"
             disabled={hasOngoing === false}
@@ -262,7 +262,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
           >
             从对局加载
           </button>
-          <button type="button" className="calculator-button" onClick={clearAll} data-testid="calc-clear">
+          <button type="button" className="felt-control" onClick={clearAll} data-testid="calc-clear">
             清空
           </button>
         </div>
@@ -276,7 +276,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
 
       <div className="calculator-layout">
         <div className="calculator-input">
-          <section className="calculator-panel" aria-label="选牌">
+          <section className="felt-panel" aria-label="选牌">
             <div className="mode-row" role="group" aria-label="选牌模式">
               <button
                 type="button"
@@ -335,7 +335,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
                 <p>目标：{tileName(meldTarget)}，选择实际牌面：</p>
                 {meldChoices.length === 0 && <p>剩余牌不足以组成该副露。</p>}
                 {meldChoices.map((choice, index) => (
-                  <button key={`${choice.type}-${index}`} type="button" className="calculator-button" data-testid="meld-choice"
+                  <button key={`${choice.type}-${index}`} type="button" className="felt-control" data-testid="meld-choice"
                     onClick={() => { setMelds([...melds, { ...choice, target: meldTarget }]); setMeldTarget(null); }}>
                     {choice.type === 'peng' ? '碰' : '杠'}：{tileNames(choice.tiles)}
                   </button>
@@ -343,7 +343,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
               </div>
             )}
           </section>
-          <section className="calculator-panel calculator-trays" aria-label="当前牌面">
+          <section className="felt-panel calculator-trays" aria-label="当前牌面">
             <div className="tray">
               <span>手牌</span>
               <div className="tray-tiles" data-testid="hand-tray">
@@ -384,7 +384,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
         </div>
 
         <div className="calculator-output">
-          <section className="calculator-panel" data-testid="calc-result" aria-labelledby="calc-result-title">
+          <section className="felt-panel" data-testid="calc-result" aria-labelledby="calc-result-title">
             <h3 id="calc-result-title">听牌分析</h3>
             {!result && <p className="muted">摆满 {handLimit} 张手牌后查看分析</p>}
             {result && 'error' in result && <p className="calc-error">{result.error}</p>}
@@ -443,13 +443,13 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
             )}
           </section>
 
-          <section className="calculator-panel" data-testid="sim-panel" aria-labelledby="calc-sim-title">
+          <section className="felt-panel" data-testid="sim-panel" aria-labelledby="calc-sim-title">
             <h3 id="calc-sim-title">胜率估算 <small>粗估，仅供参考</small></h3>
             {sim.status === 'idle' && (
               <>
                 <button
                   type="button"
-                  className="calculator-button calculator-button-gold"
+                  className="felt-control felt-control-gold"
                   data-testid="calc-sim-run"
                   disabled={hand.length !== handLimit}
                   onClick={startSim}
@@ -492,7 +492,7 @@ export default function Calculator({ rulesetId: rulesetIdProp }: { rulesetId?: s
                   {doneTally.winCount > 0 ? Math.round(doneTally.winTurnSum / doneTally.winCount) : '—'} 巡
                   {simAttribution ? '' : ' · 他家弃牌归属为近似'} · 多人抢杠时平分该局胜利份额
                 </p>
-                <button type="button" className="calculator-button" onClick={startSim} data-testid="calc-sim-rerun">
+                <button type="button" className="felt-control" onClick={startSim} data-testid="calc-sim-rerun">
                   再模拟一次
                 </button>
               </div>

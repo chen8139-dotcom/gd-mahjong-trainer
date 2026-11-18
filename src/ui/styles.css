@@ -164,7 +164,7 @@ button { touch-action: manipulation; }
 .play-page .action-bar button { background: var(--felt-button); }
 .play-page .action-bar .primary,
 .calculator-page .mode-row button.active,
-.calculator-page .calculator-button-gold {
+.felt-table .felt-control-gold {
   background: var(--felt-gold); color: #5a4500; border-color: #d8b558; font-weight: 700;
 }
 .felt-table .tray > span { color: #cfe6d8; }
@@ -544,30 +544,30 @@ button { touch-action: manipulation; }
 .me-area .tray { margin: 0; }
 .auto-note { text-align: center; margin: 2px 0 0; }
 
-/* 计算器沿用陪练的绿毡、牌区与金色操作状态 */
-.calculator-page { color: #e8f3ec; }
+/* 计算器与设置沿用陪练的绿毡、牌区与操作样式 */
+.calculator-page, .settings-page { color: #e8f3ec; }
 .calculator-header, .calculator-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .calculator-header { justify-content: space-between; margin-bottom: 12px; }
 .calculator-header h2 { margin: 4px 0; }
 .calculator-tools .ruleset-row { margin: 0; font-size: 13px; }
-.calculator-button, .calculator-page .mode-row button, .calculator-tools select {
+.felt-control, .calculator-page .mode-row button, .calculator-tools select {
   min-height: 44px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px;
   background: var(--felt-button); color: var(--ink); font: inherit; font-size: 13px; cursor: pointer;
 }
-.calculator-page button.calculator-button:disabled, .calculator-page .mode-row button:disabled {
+.calculator-page button.felt-control:disabled, .calculator-page .mode-row button:disabled {
   color: #c1d3c7; background: rgba(0, 0, 0, 0.18); border-color: var(--felt-line); cursor: not-allowed;
 }
-.calculator-page :focus-visible { outline: 2px solid var(--felt-gold); outline-offset: 2px; }
+.calculator-page :focus-visible, .settings-page :focus-visible { outline: 2px solid var(--felt-gold); outline-offset: 2px; }
 .calculator-page .load-note { margin: 0 0 12px; }
 .calculator-layout, .calculator-input, .calculator-output { display: grid; gap: 10px; align-content: start; min-width: 0; }
-.calculator-panel {
+.felt-panel {
   min-width: 0; padding: 10px; border: 1px solid var(--felt-line); border-radius: 10px;
   background: var(--felt-panel); font-size: 14px; line-height: 1.5;
 }
-.calculator-panel h3 { margin: 0 0 8px; color: #f2ead0; font-size: 15px; }
-.calculator-panel h3 small { margin-left: 4px; color: #b9d6c6; font-size: 12px; font-weight: 400; }
-.calculator-panel p { margin: 8px 0; }
-.calculator-panel p:last-child { margin-bottom: 0; }
+.felt-panel h3 { margin: 0 0 8px; color: #f2ead0; font-size: 15px; }
+.felt-panel h3 small { margin-left: 4px; color: #b9d6c6; font-size: 12px; font-weight: 400; }
+.felt-panel p { margin: 8px 0; }
+.felt-panel p:last-child { margin-bottom: 0; }
 .calculator-page .mode-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin: 0; }
 .calculator-page .tile-picker {
   display: grid; grid-template-columns: repeat(9, minmax(0, 1fr)); justify-items: center;
@@ -589,15 +589,15 @@ button { touch-action: manipulation; }
 .calculator-trays .tray-empty { color: #b9d6c6; font-size: 12px; padding-top: 14px; }
 .calculator-trays .meld { align-items: center; }
 .calculator-trays .meld small { min-width: 0; padding: 0 4px; }
-.calculator-panel .calc-summary {
+.felt-panel .calc-summary {
   background: rgba(255, 217, 122, 0.12); color: var(--felt-gold); font-size: 13px; font-weight: 600;
   border-radius: 6px; padding: 6px 8px; margin: 0 0 6px;
 }
-.calculator-panel .wait-row + .wait-row { border-top: 1px solid var(--felt-line); }
-.calculator-panel .wait-row .tile-face { flex-shrink: 0; }
-.calculator-panel .fan-detail { color: #b9d6c6; }
-.calculator-panel .fan-warn, .calculator-panel .calc-hint { color: var(--felt-gold); }
-.calculator-panel .calc-error { color: #ffc1b0; }
+.felt-panel .wait-row + .wait-row { border-top: 1px solid var(--felt-line); }
+.felt-panel .wait-row .tile-face { flex-shrink: 0; }
+.felt-panel .fan-detail { color: #b9d6c6; }
+.felt-panel .fan-warn, .felt-panel .calc-hint { color: var(--felt-gold); }
+.felt-panel .calc-error { color: #ffc1b0; }
 .shanten-head { font-weight: 600; }
 .sim-grid { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .sim-cell {
@@ -616,7 +616,26 @@ button { touch-action: manipulation; }
 @media (min-width: 960px) {
   .calculator-page { max-width: 1200px; padding: 16px; }
   .calculator-layout { grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); }
-  .calculator-panel { padding: 12px; }
+  .felt-panel { padding: 12px; }
+}
+
+.settings-layout { display: grid; gap: 10px; align-items: start; }
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  min-height: 44px; cursor: pointer;
+}
+.settings-row select { max-width: 100%; }
+.settings-skin-preview {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px;
+  margin: 8px 0; padding: 10px; border-radius: 6px; background: rgba(0, 0, 0, 0.18);
+}
+.settings-hint-row { border-top: 1px solid var(--felt-line); }
+.settings-hint-row input { width: 20px; height: 20px; margin: 0; accent-color: var(--felt-gold); cursor: pointer; }
+.settings-backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.settings-backup-hint { color: var(--felt-gold); font-size: 13px; }
+@media (min-width: 960px) {
+  .settings-page { max-width: 820px; padding: 16px; }
+  .settings-layout { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); }
 }
 
 /* 结算弹层：居中遮罩（桌面/移动通用） */
