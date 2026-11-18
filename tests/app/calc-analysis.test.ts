@@ -66,4 +66,18 @@ describe('analyzeHand：向听分析', () => {
     const candSeen = seen1.candidates.find((c) => c.tile === 'm1');
     expect(candSeen?.ukeireDetail.some((d) => d.tile === 'p3' && d.remaining === 3)).toBe(true);
   });
+
+  it.each(['peng', 'mingGang'] as const)('百搭副露 %s 按实体鬼牌扣减受入', (type) => {
+    const tiles: TileId[] = type === 'peng' ? ['z5', 'p1', 'p1'] : ['z5', 'p1', 'p1', 'p1'];
+    const result = analyzeHand({
+      hand: idsOf('123m456m123p55p'),
+      melded: [{ type, tiles, target: 'z5' }],
+      seen: type === 'peng' ? ['p1'] : [],
+      rulesetId: 'zimoji',
+      wildcards: ['p1'],
+    });
+    const discard = result.candidates.find((candidate) => candidate.tile === 'p1');
+    expect(discard?.ukeireDetail).toEqual([{ tile: 'p4', remaining: 4 }]);
+    expect(discard?.ukeireTiles).toBe(4);
+  });
 });

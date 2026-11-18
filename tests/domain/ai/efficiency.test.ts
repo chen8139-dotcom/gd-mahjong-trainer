@@ -30,13 +30,12 @@ const viewOf = (hand14: string, rulesetId = 'tuidaohu', extraSeen: TileId[] = []
 };
 
 describe('evalDiscards', () => {
-  it('听牌局面：留两面连形进张最多（8m9m 兼容 789m/888m/999m）', () => {
-    // 14 张：123m456m789m 123p 55p；打 1m 留 234m+567m+89m → 听 7m/8m/9m 共 12 张
+  it('听牌局面：保留可重组的万子连形进张最多', () => {
     const view = viewOf('123m456m789m123p55p');
     const evals = evalDiscards(view, getRuleset('tuidaohu'));
     const m1 = evals.find((e) => e.tile === 'm1');
     expect(m1?.shantenAfter).toBe(0);
-    expect(m1?.ukeireTiles).toBe(10); // 1m×4 + 4m×3 + 7m×3（4m/7m 手中已见各扣 1）
+    expect(m1?.ukeireTiles).toBe(9); // 听 1m/4m/7m，各已见一张
     const best = evals.reduce((a, b) => (scoreOf(b, 4) > scoreOf(a, 4) ? b : a));
     expect(best.tile).toBe('m1');
   });
@@ -46,8 +45,8 @@ describe('evalDiscards', () => {
     const evals = evalDiscards(view, getRuleset('tuidaohu'));
     const p1 = evals.find((e) => e.tile === 'p1');
     const p3 = evals.find((e) => e.tile === 'p3');
-    expect(p1?.ukeireTiles).toBe(8); // 打 1p 留 23p 两面听 1p/4p
-    expect(p3?.ukeireTiles).toBe(4); // 打 3p 留 12p 两面听 3p 仅 4 张
+    expect(p1?.ukeireTiles).toBe(7); // 留 23p：1p 剩 3 张，4p 剩 4 张
+    expect(p3?.ukeireTiles).toBe(3); // 留 12p：3p 剩 3 张
   });
 
   it('副露减少 need，评分基准随之变化', () => {
@@ -60,11 +59,11 @@ describe('evalDiscards', () => {
   });
 
   it('已见牌计入进张剩余（seen 含对手弃牌）', () => {
-    // 打 1p 后两面 23p，但 1p 与 4p 各被别人打掉一张 → 进张 6
+    // 1p 已见手中和牌河各一张，4p 已见牌河一张
     const view = viewOf('123m456m789m123p55p', 'tuidaohu', ['p1', 'p4']);
     const evals = evalDiscards(view, getRuleset('tuidaohu'));
     const p1 = evals.find((e) => e.tile === 'p1');
-    expect(p1?.ukeireTiles).toBe(6);
+    expect(p1?.ukeireTiles).toBe(5);
   });
 });
 
@@ -72,6 +71,24 @@ describe('toCounts 守恒', () => {
   it('视图手牌向量与 TileId 一致', () => {
     const view = viewOf('123m456m789m123p5p');
     expect(toCounts(view.hand)).toEqual(parseHandShorthand('123m456m789m123p5p'));
+  });
+});
+
+describe.each([false, true])('模拟弃牌保留已见数（鬼牌=%s）', (withWildcard) => {
+  it.each([1, 2, 3, 4])('已见 %i 张时，正确计算弃出牌的剩余张数', (seenCount) => {
+    const publicDiscards = Array<TileId>(seenCount - 1).fill('p1');
+    const view = viewOf('123m456m789m123p55p', 'zimoji', publicDiscards);
+    view.discards[1] = publicDiscards;
+    view.wildcards = withWildcard ? ['p1'] : [];
+    const ruleset = getRuleset('zimoji');
+    const basic = evalDiscards(view, ruleset).find((e) => e.tile === 'p1');
+    const detail = evalDiscardsAll(view, ruleset).find((e) => e.tile === 'p1');
+    const remaining = detail?.ukeireDetail.find((d) => d.tile === 'p1')?.remaining ?? 0;
+
+    expect(basic?.shantenAfter).toBe(0);
+    expect(remaining).toBe(4 - seenCount);
+    expect(basic?.ukeireTiles).toBe(4 + remaining); // 另可摸入四张 4p
+    expect(detail?.ukeireTiles).toBe(basic?.ukeireTiles);
   });
 });
 
@@ -96,13 +113,12 @@ describe('evalDiscardsAll（计算器全候选受入）', () => {
     expect(evals.filter((e) => e.tile === 's5')).toHaveLength(1);
   });
 
-  it('已见扣减进明细：被弃过的种剩余 3 张', () => {
+  it('已见扣减进明细：模拟弃牌与原有弃牌都计入', () => {
     const view = viewOf('123m456m789m123p55p', 'tuidaohu', ['p1', 'p4']);
     const evals = evalDiscardsAll(view, getRuleset('tuidaohu'));
     const p1 = evals.find((e) => e.tile === 'p1');
-    expect(p1?.ukeireTiles).toBe(6); // 与 evalDiscards 同口径
-    expect(p1?.ukeireDetail.map((d) => d.tile)).toEqual(['p1', 'p4']);
-    expect(p1?.ukeireDetail.every((d) => d.remaining === 3)).toBe(true);
+    expect(p1?.ukeireTiles).toBe(5);
+    expect(p1?.ukeireDetail).toEqual([{ tile: 'p1', remaining: 2 }, { tile: 'p4', remaining: 3 }]);
   });
 
   it('与 evalDiscards 口径一致（最优类受入数相同）', () => {

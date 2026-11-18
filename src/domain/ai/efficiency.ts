@@ -38,10 +38,11 @@ export function scoreOf(e: DiscardEval, need: number): number {
   return 100 * (need - Math.max(e.shantenAfter, 0)) + e.ukeireTiles;
 }
 
+/** 模拟弃牌只改变暗牌，打出张进入弃牌池，仍计入已见。 */
 export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] {
   const hand = toCounts(view.hand);
   const meldedSets = view.melds[view.seat].length;
-  const seen = view.seenCounts.slice();
+  const seen = view.seenCounts;
 
   const results: DiscardEval[] = [];
   for (let t = 0; t < 34; t++) {
@@ -69,7 +70,6 @@ export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] 
     const rep = group[0];
     const t = tileIdToIndex(rep.tile);
     hand[t]--;
-    seen[t]--; // 已打出，不再计入已见
     let ukeire = 0;
     for (let d = 0; d < 34; d++) {
       const avail = 4 - seen[d];
@@ -78,7 +78,6 @@ export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] 
       if (cachedShanten(hand, meldedSets, ruleset, view.wildcards) < best) ukeire += avail;
       hand[d]--;
     }
-    seen[t]++;
     hand[t]++;
     for (const r of group) r.ukeireTiles = ukeire;
   }
@@ -86,11 +85,11 @@ export function evalDiscards(view: PlayerView, ruleset: Ruleset): DiscardEval[] 
 }
 
 /** 计算器向听分析用：对每张弃牌候选（打出结果等价类去重）都给出向听与受入明细。
- *  与 evalDiscards 同口径（seen 计含自己暗牌；打出张从 seen 里同样扣减）。 */
+ *  与 evalDiscards 同口径，打出张仍计入已见。 */
 export function evalDiscardsAll(view: PlayerView, ruleset: Ruleset): DiscardEvalDetail[] {
   const hand = toCounts(view.hand);
   const meldedSets = view.melds[view.seat].length;
-  const seen = view.seenCounts.slice();
+  const seen = view.seenCounts;
 
   // 打出后暗牌向量相同的候选共用一次计算（等价类，如拆对子任意一张）
   const classes = new Map<string, DiscardEvalDetail[]>();
@@ -114,7 +113,6 @@ export function evalDiscardsAll(view: PlayerView, ruleset: Ruleset): DiscardEval
     const rep = group[0];
     const t = tileIdToIndex(rep.tile);
     hand[t]--;
-    seen[t]--; // 已打出，不再计入已见（同 evalDiscards 口径）
     const detail: { tile: TileId; remaining: number }[] = [];
     let ukeire = 0;
     for (let d = 0; d < 34; d++) {
@@ -127,7 +125,6 @@ export function evalDiscardsAll(view: PlayerView, ruleset: Ruleset): DiscardEval
       }
       hand[d]--;
     }
-    seen[t]++;
     hand[t]++;
     for (const r of group) {
       r.ukeireTiles = ukeire;
