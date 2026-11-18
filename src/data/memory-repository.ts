@@ -64,6 +64,11 @@ export class MemoryRepository implements Repository {
     return (this.snapshots.get(gameId) ?? []).map((e) => ({ ...e }));
   }
 
+  async getMatch(id: string): Promise<MatchRecord | null> {
+    const match = this.matches.get(id);
+    return match ? structuredClone(match) : null;
+  }
+
   async getActiveMatch(): Promise<MatchRecord | null> {
     const active = [...this.matches.values()]
       .filter((m) => !m.finished)

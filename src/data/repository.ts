@@ -75,6 +75,8 @@ export interface MatchRecord {
   id: string;
   rulesetId: string;
   baseSeed: number;
+  /** 整圈共用的 AI 难度，旧记录缺省。 */
+  difficulty?: Difficulty;
   /** 整圈共用的鬼牌种数；旧记录缺省为关闭。 */
   wildcardCount?: 0 | 1 | 2 | 3;
   /** 下一局编号（含连庄局，从 1 起） */
@@ -106,6 +108,7 @@ export interface Repository {
   loadSnapshots(gameId: string): Promise<SnapshotEntry[]>;
 
   // 一圈（match）进度：同一时刻至多一条未完成；saveMatch 为 upsert
+  getMatch(id: string): Promise<MatchRecord | null>;
   getActiveMatch(): Promise<MatchRecord | null>;
   saveMatch(m: MatchRecord): Promise<void>;
   abandonActiveMatch(): Promise<void>;

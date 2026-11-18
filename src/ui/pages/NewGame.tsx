@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { getRepository } from '../../app/store';
 import { deserializeSnapshot } from '../../app/game-controller';
+import { decodeGameSeed, type GameSeed } from '../../app/game-seed';
 import { DEFAULT_SETTINGS, type Settings } from '../../data/repository';
 import type { Difficulty } from '../../domain/ai/types';
 import { getRuleset } from '../../domain/rulesets';
@@ -24,7 +25,18 @@ export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?:
   const [hintEnabled, setHintEnabled] = useState(base.hintEnabled);
   const [circle, setCircle] = useState(false);
   const [wildcardCount, setWildcardCount] = useState<0 | 1 | 2 | 3>(0);
+  const [importSeed, setImportSeed] = useState(false);
+  const [seedText, setSeedText] = useState('');
+  const { seed, seedError } = useMemo((): { seed?: GameSeed; seedError?: string } => {
+    if (!importSeed || !seedText.trim()) return {};
+    try {
+      return { seed: decodeGameSeed(seedText) };
+    } catch (e) {
+      return { seedError: e instanceof Error ? e.message : '无法识别种子。' };
+    }
+  }, [importSeed, seedText]);
   const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
   // 进页时捕获的进行中对局（id + 摘要）；确认开始时若它仍是 ongoing 才废弃
   const [ongoing, setOngoing] = useState<{ gameId: string; summary: string } | null>(null);
@@ -62,7 +74,9 @@ export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?:
   }, []);
 
   const confirm = async (): Promise<void> => {
+    if (!ready || starting || (importSeed && !seed)) return;
     setStarting(true);
+    setStartError(null);
     const repo = await getRepository();
     if (ongoing) {
       const still = (await repo.listGames(5)).find((x) => x.id === ongoing.gameId && x.outcome === 'ongoing');
@@ -70,7 +84,11 @@ export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?:
     }
     // 新开对局（单局或一圈）都废弃进行中的一圈；?match=1 由 /play 再新开一圈
     await repo.abandonActiveMatch();
-    await repo.saveSettings({ ...base, rulesetId, difficulty, hintEnabled });
+    await repo.saveSettings(seed ? { ...base, hintEnabled } : { ...base, rulesetId, difficulty, hintEnabled });
+    if (seed) {
+      navigate('/play', { replace: true, state: { autostart: true, seedText: seedText.trim(), seedStartId: crypto.randomUUID() } });
+      return;
+    }
     // 透传来源查询串（如 E2E 的 ?seed=42）：确定性开局不受配置页往返影响；打一圈追加 match=1
     const search = new URLSearchParams(params);
     if (circle) search.set('match', '1');
@@ -97,25 +115,50 @@ export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?:
             ⚠️ 确认开始后将放弃未完成的一圈（已到第 {ongoingMatch.handNo} 局）。
           </p>
         )}
-        <div className="new-game-options">
-          {wildcardEnabled && (
-            <label className="option-card">
-              <b>鬼牌种数</b>
-              <select disabled={!ready} value={wildcardCount} data-testid="new-game-wildcards"
-                onChange={(event) => setWildcardCount(Number(event.target.value) as 0 | 1 | 2 | 3)}>
-                <option value={0}>关闭</option>
-                <option value={1}>1 种</option>
-                <option value={2}>2 种</option>
-                <option value={3}>3 种</option>
-              </select>
-              <small>每种牌的四张都是鬼牌，每局随机指定。</small>
-            </label>
+        <div className="seed-import">
+          <button type="button" aria-expanded={importSeed} onClick={() => {
+            setImportSeed(!importSeed);
+            setSeedText('');
+          }} data-testid="new-game-import-seed">{importSeed ? '清除种子' : '导入种子'}</button>
+          {importSeed && (
+            <>
+              <label className="option-card">
+                <b>对局种子</b>
+                <input autoComplete="off" spellCheck={false} value={seedText} placeholder="粘贴结算页分享的种子"
+                  onChange={(event) => setSeedText(event.target.value)} aria-invalid={!!seedError} data-testid="new-game-seed-text" />
+              </label>
+              {seedError && <p className="new-game-hint" role="alert">{seedError}</p>}
+              {seed && (
+                <div className="new-game-hint" role="status" data-testid="new-game-seed-preview">
+                  <b>{seed.kind === 'hand' ? '单局' : '整圈'} · {getRuleset(seed.rulesetId).name}</b>
+                  <div>{seed.wildcardCount ? `${seed.wildcardCount} 种鬼牌` : '关闭鬼牌'} · AI {DIFF_NAMES[seed.difficulty]}
+                    {seed.kind === 'hand' && ` · ${['东', '南', '西', '北'][seed.dealer]}家坐庄`}</div>
+                </div>
+              )}
+            </>
           )}
-          <RulesetPicker selected={rulesetId} onChange={() => undefined} prefix="new-game" />
         </div>
+        {!importSeed && (
+          <div className="new-game-options">
+            {wildcardEnabled && (
+              <label className="option-card">
+                <b>鬼牌种数</b>
+                <select disabled={!ready} value={wildcardCount} data-testid="new-game-wildcards"
+                  onChange={(event) => setWildcardCount(Number(event.target.value) as 0 | 1 | 2 | 3)}>
+                  <option value={0}>关闭</option>
+                  <option value={1}>1 种</option>
+                  <option value={2}>2 种</option>
+                  <option value={3}>3 种</option>
+                </select>
+                <small>每种牌的四张都是鬼牌，每局随机指定。</small>
+              </label>
+            )}
+            <RulesetPicker selected={rulesetId} onChange={() => undefined} prefix="new-game" />
+          </div>
+        )}
 
         <div className="new-game-options">
-          {rulesetId === 'zimoji' && (
+          {!importSeed && rulesetId === 'zimoji' && (
             <label className="option-card option-card-check">
               <input
                 type="checkbox"
@@ -131,21 +174,23 @@ export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?:
             </label>
           )}
 
-          <label className="option-card">
-            <b>AI 难度</b>
-            <select
-              disabled={!ready}
-              value={difficulty}
-              onChange={(e) => setDifficulty(e.target.value as Difficulty)}
-              data-testid="new-game-difficulty"
-            >
-              {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
-                <option key={d} value={d}>
-                  {DIFF_NAMES[d]}
-                </option>
-              ))}
-            </select>
-          </label>
+          {!importSeed && (
+            <label className="option-card">
+              <b>AI 难度</b>
+              <select
+                disabled={!ready}
+                value={difficulty}
+                onChange={(e) => setDifficulty(e.target.value as Difficulty)}
+                data-testid="new-game-difficulty"
+              >
+                {(Object.keys(DIFF_NAMES) as Difficulty[]).map((d) => (
+                  <option key={d} value={d}>
+                    {DIFF_NAMES[d]}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className="option-card option-card-check">
             <input
@@ -163,16 +208,21 @@ export default function NewGame({ wildcardEnabled = false }: { wildcardEnabled?:
         </div>
 
         <div className="new-game-actions">
-          {/* 返回仅在放弃进行中对局的场景有意义；首次进入（无对局可反悔）不显示 */}
-          {ongoing && (
+          {(ongoing || ongoingMatch) && (
             <button data-testid="new-game-back" onClick={() => navigate('/play')}>
               返回
             </button>
           )}
-          <button className="primary" data-testid="new-game-confirm" disabled={starting || !ready} onClick={() => void confirm()}>
+          <button className="primary" data-testid="new-game-confirm" disabled={starting || !ready || (importSeed && !seed)} onClick={() => {
+            void confirm().catch(() => {
+              setStarting(false);
+              setStartError('开局失败，请重试。');
+            });
+          }}>
             {starting ? '正在开局…' : '开始对局'}
           </button>
         </div>
+        {startError && <p className="new-game-hint" role="alert">{startError}</p>}
       </div>
     </div>
   );

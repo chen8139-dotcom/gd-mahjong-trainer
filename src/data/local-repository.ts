@@ -95,6 +95,9 @@ export async function createLocalRepository(dbName = DB_NAME): Promise<Repositor
       const rows = await db.getAllFromIndex('snapshots', 'by-game', gameId);
       return rows.map((r) => ({ seq: r.seq, json: r.json })).sort((a, b) => a.seq - b.seq);
     },
+    async getMatch(id: string): Promise<MatchRecord | null> {
+      return (await db.get('matches', id)) ?? null;
+    },
     async getActiveMatch(): Promise<MatchRecord | null> {
       const all = await db.getAll('matches');
       const active = all

@@ -345,6 +345,19 @@ button { touch-action: manipulation; }
 .new-game-actions .primary:hover { filter: brightness(1.04); }
 .new-game-actions .primary:active { transform: translateY(1px); }
 .new-game-actions .primary:disabled { opacity: 0.6; cursor: default; }
+.seed-import { display: grid; gap: 8px; margin-bottom: 12px; }
+.seed-import .new-game-hint { margin: 0; }
+.seed-import > button, .seed-copy > button, .result-panel .result-new-game {
+  justify-self: start; min-height: 44px; padding: 8px 12px; border: 1px solid var(--line);
+  border-radius: 8px; background: #fff; color: var(--ink); cursor: pointer;
+}
+.seed-import input, .seed-copy input {
+  min-width: 0; width: 100%; min-height: 44px; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); font-size: 16px;
+}
+.seed-copy { display: grid; gap: 6px; margin: 8px 0; }
+.seed-copy label { display: grid; gap: 4px; }
+.result-panel .result-new-game { margin: 8px 0 0 8px; }
 @media (min-width: 640px) {
   .new-game-options { grid-template-columns: 1fr 1fr; }
 }

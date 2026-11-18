@@ -7,13 +7,14 @@ import { getRuleset } from '../domain/rulesets';
 import type { GameAction, GamePhase, LastDiscard, PlayerView } from '../domain/game-types';
 import type { MeldRef } from '../domain/agari';
 import { indexToTileId, tileIdToIndex, type TileId } from '../domain/tiles';
-import type { Decision } from '../domain/ai/types';
+import type { Decision, Difficulty } from '../domain/ai/types';
 import { wildcardMeldChoices } from '../domain/wildcard-meld';
 
 export interface GameConfig {
   seed: number;
   rulesetId: string;
   dealer?: number;
+  difficulty?: Difficulty;
   /** 自摸鸡每局随机指定的鬼牌种数，缺省关闭。 */
   wildcardCount?: 0 | 1 | 2 | 3;
 }
@@ -45,6 +46,8 @@ export interface GameState {
   v: 1;
   seed: number;
   rulesetId: string;
+  /** 陪练开局时的 AI 难度，旧快照缺省。 */
+  difficulty?: Difficulty;
   /** 本局的鬼牌牌种；旧快照没有此字段时视为关闭。 */
   wildcards?: TileId[];
   dealer: number;
@@ -131,6 +134,7 @@ export function newGame(cfg: GameConfig): GameState {
     v: 1,
     seed: cfg.seed,
     rulesetId: cfg.rulesetId,
+    ...(cfg.difficulty ? { difficulty: cfg.difficulty } : {}),
     wildcards,
     dealer,
     turn: dealer,

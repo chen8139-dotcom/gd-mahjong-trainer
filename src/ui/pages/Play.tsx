@@ -6,6 +6,7 @@ import {
   playerView,
   serializeSnapshot,
   deserializeSnapshot,
+  type GameConfig,
   type GameState,
   type GameResult,
 } from '../../app/game-controller';
@@ -15,19 +16,22 @@ import { evaluateWin } from '../../domain/score';
 import { evaluateTurn, type Divergence } from '../../app/coach';
 import { getRepository } from '../../app/store';
 import { exportGame, importGame, summarizeState } from '../../app/game-transfer';
+import { decodeGameSeed, shareCircleSeed, shareHandSeed } from '../../app/game-seed';
 import { getRuleset } from '../../domain/rulesets';
 import { decide } from '../../domain/ai/decider';
-import type { Difficulty } from '../../domain/ai/types';
+import { isDifficulty, type Difficulty } from '../../domain/ai/types';
 import type { GameAction } from '../../domain/game-types';
 import { advanceMatch, handSeed, newMatch, ranking, type MatchState } from '../../app/match';
-import type { Repository } from '../../data/repository';
+import { DEFAULT_SETTINGS, type Repository } from '../../data/repository';
 import TileFace from '../components/TileFace';
+import CopyGameSeed from '../components/CopyGameSeed';
 
 const HUMAN_SEAT = 0;
 
 interface Session {
   gameId: string;
   state: GameState;
+  settled?: true;
 }
 
 const WIND_NAMES = ['东', '南', '西', '北'];
@@ -81,17 +85,20 @@ function ResultHands({ state, result }: { state: GameState; result: GameResult }
 }
 
 /** 开一圈中的一局并落库：种子/庄家由圈进度决定（整圈可复现）。 */
-async function startMatchHandAt(repo: Repository, m: MatchState): Promise<Session> {
-  const state = newGame({ seed: handSeed(m), rulesetId: m.rulesetId, dealer: m.dealer, wildcardCount: m.wildcardCount ?? 0 });
-  const gameId = crypto.randomUUID();
+function startMatchHandAt(repo: Repository, m: MatchState): Promise<Session> {
+  return createSession(repo, { seed: handSeed(m), rulesetId: m.rulesetId, dealer: m.dealer, wildcardCount: m.wildcardCount ?? 0, difficulty: m.difficulty });
+}
+
+async function createSession(repo: Repository, config: GameConfig, gameId: string = crypto.randomUUID()): Promise<Session> {
+  const state = newGame(config);
   await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
   await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
   return { gameId, state };
 }
 
 /** 新开一圈（废弃旧圈由调用方负责）。 */
-function makeNewMatch(rulesetId: string, baseSeed: number, wildcardCount: 0 | 1 | 2 | 3 = 0): MatchState {
-  return newMatch(crypto.randomUUID(), rulesetId, baseSeed, Date.now(), wildcardCount);
+function makeNewMatch(rulesetId: string, baseSeed: number, wildcardCount: 0 | 1 | 2 | 3, difficulty: Difficulty, id: string = crypto.randomUUID()): MatchState {
+  return { ...newMatch(id, rulesetId, baseSeed, Date.now(), wildcardCount), difficulty };
 }
 
 /** 一圈内已完成各局的紧凑列表（圈面板与总结算共用）。 */
@@ -118,7 +125,7 @@ function MatchHands({ match }: { match: MatchState }) {
 }
 
 /** 圈总结算：四家累计（按名次排序）+ 各局回顾。 */
-function MatchSummary({ match }: { match: MatchState }) {
+function MatchSummary({ match, difficulty }: { match: MatchState; difficulty: Difficulty }) {
   const order = ranking(match);
   return (
     <div data-testid="match-summary" className="match-summary">
@@ -145,6 +152,7 @@ function MatchSummary({ match }: { match: MatchState }) {
         </tbody>
       </table>
       <MatchHands match={match} />
+      <CopyGameSeed kind="circle" seed={shareCircleSeed(match, difficulty)} />
     </div>
   );
 }
@@ -218,35 +226,44 @@ export default function Play() {
   // ?match=1：显式新开一圈（新对局页勾选「打一圈」跳转 / E2E 直达），旧圈废弃
   const startMatch = params.get('match') === '1';
   // 配置页「开始对局」/结算「再来一局」带 autostart 标记回跳：无进行中对局时免询问直接开局
-  const startOptions = location.state as { autostart?: boolean; wildcardCount?: unknown } | null;
+  const startOptions = location.state as { autostart?: boolean; wildcardCount?: unknown; seedText?: string; seedStartId?: string } | null;
   const autostart = startOptions?.autostart === true;
+  const importedSeedText = startOptions?.seedText;
+  const seedStartId = startOptions?.seedStartId;
   const requestedWildcards = startOptions?.wildcardCount;
   const wildcardCount: 0 | 1 | 2 | 3 = requestedWildcards === 1 || requestedWildcards === 2 || requestedWildcards === 3 ? requestedWildcards : 0;
+  const defaultDifficulty = settings?.difficulty ?? DEFAULT_SETTINGS.difficulty;
+  const circleDifficulty = match?.difficulty ?? defaultDifficulty;
+  const difficulty = session?.state.difficulty ?? circleDifficulty;
 
   // 开一圈的下一手（圈未完时有效）：庄家与种子来自圈进度；清空教练提示与分歧点
   const startMatchHand = useCallback(async (): Promise<void> => {
-    const m = matchRef.current;
+    let m = matchRef.current;
     if (!m || m.finished) return;
     const repo = await getRepository();
+    if (!m.difficulty) {
+      m = { ...m, difficulty: defaultDifficulty };
+      await repo.saveMatch(m);
+      setMatch(m);
+    }
     const next = await startMatchHandAt(repo, m);
     setHint(null);
     setDivergences([]);
     setSession(next);
-  }, []);
+  }, [defaultDifficulty]);
 
   // 再来一圈：废弃当前圈、新开一圈并直接开第 1 局
   const startNewMatch = useCallback(async (): Promise<void> => {
     const repo = await getRepository();
     await repo.abandonActiveMatch();
-    const m = makeNewMatch(matchRef.current?.rulesetId ?? 'zimoji', Date.now() % 100000, matchRef.current?.wildcardCount ?? 0);
+    const m = makeNewMatch(matchRef.current?.rulesetId ?? 'zimoji', Date.now() % 100000, matchRef.current?.wildcardCount ?? 0, defaultDifficulty);
     await repo.saveMatch(m);
-    setMatch(m);
-    matchRef.current = m; // 落库间隙同步引用，startMatchHandAt 后续渲染才到来
     const next = await startMatchHandAt(repo, m);
+    setMatch(m);
     setHint(null);
     setDivergences([]);
     setSession(next);
-  }, []);
+  }, [defaultDifficulty]);
 
   useEffect(() => {
     if (startedRef.current) return;
@@ -255,6 +272,7 @@ export default function Play() {
       const repo = await getRepository();
       const s = await repo.getSettings();
       if (s) setSettings({ difficulty: s.difficulty, hintEnabled: s.hintEnabled });
+      const localDifficulty = s?.difficulty ?? DEFAULT_SETTINGS.difficulty;
 
       // 崩溃恢复：存在进行中对局则询问（SC-7）。优先级最高——局中刷新即使 URL 仍带 ?match=1 也先恢复原局
       if (!autoMode) {
@@ -283,17 +301,43 @@ export default function Play() {
       // 打一圈上下文：?match=1 语义为「确保有一圈」——已有未完成圈则续用（刷新场景，Play 按
       // location.key 重挂导致 init 重跑时不得新建圈）；否则废弃旧圈、新开一圈（新对局页确认
       // 入口会先废弃旧圈，正常入口总走新建分支）
+      const imported = autostart && importedSeedText ? decodeGameSeed(importedSeedText) : null;
       let m: MatchState | null = null;
-      if (startMatch) {
+      if (imported?.kind === 'circle') {
+        const previous = seedStartId ? await repo.getMatch(seedStartId) : null;
+        if (previous) {
+          if (previous.abandoned) {
+            navigate('/play/new', { replace: true });
+          } else {
+            setMatch(previous);
+          }
+          return;
+        }
+        m = makeNewMatch(imported.rulesetId, imported.seed, imported.wildcardCount, imported.difficulty, seedStartId);
+        await repo.saveMatch(m);
+      } else if (imported?.kind === 'hand' && seedStartId) {
+        // 浏览器刷新仍保留开局请求。已结算的种子局直接展示原结果。
+        const snapshots = await repo.loadSnapshots(seedStartId);
+        const last = snapshots[snapshots.length - 1];
+        if (last) {
+          const state = deserializeSnapshot(last.json);
+          if (state.result) {
+            setSession({ gameId: seedStartId, state, settled: true });
+          } else {
+            navigate('/play/new', { replace: true });
+          }
+          return;
+        }
+      } else if (!imported && startMatch) {
         const active = await repo.getActiveMatch();
         if (active && !active.finished) {
           m = active;
         } else {
           await repo.abandonActiveMatch();
-          m = makeNewMatch('zimoji', Number(seed ?? Date.now() % 100000), wildcardCount);
+          m = makeNewMatch('zimoji', Number(seed ?? Date.now() % 100000), wildcardCount, localDifficulty);
           await repo.saveMatch(m);
         }
-      } else {
+      } else if (!imported) {
         m = await repo.getActiveMatch();
       }
 
@@ -319,19 +363,15 @@ export default function Play() {
       }
 
       // 开局：一圈模式下种子/庄家来自圈进度（新圈首手或续打下一手），单局走原逻辑
-      const state = newGame({
-        seed: m ? handSeed(m) : Number(seed ?? Date.now() % 100000),
-        rulesetId: m ? m.rulesetId : 'zimoji',
-        dealer: m ? m.dealer : undefined,
-        wildcardCount: m ? m.wildcardCount ?? 0 : wildcardCount,
-      });
-      const gameId = crypto.randomUUID();
-      await repo.createGame({ id: gameId, rulesetId: state.rulesetId, startedAt: Date.now(), finishedAt: null, outcome: 'ongoing' });
-      await repo.appendSnapshot(gameId, state.snapshotSeq, serializeSnapshot(state));
+      const next = m
+        ? await startMatchHandAt(repo, m)
+        : await createSession(repo, imported?.kind === 'hand' ? imported : {
+          seed: Number(seed ?? Date.now() % 100000), rulesetId: 'zimoji', wildcardCount, difficulty: localDifficulty,
+        }, imported ? seedStartId : undefined);
       setMatch(m);
-      setSession({ gameId, state });
-    })();
-  }, [autoMode, autostart, seed, startMatch, navigate, wildcardCount]);
+      setSession(next);
+    })().catch((e: unknown) => setError(e instanceof Error ? e.message : String(e)));
+  }, [autoMode, autostart, importedSeedText, seedStartId, seed, startMatch, navigate, wildcardCount]);
 
   const resume = useCallback(async (accept: boolean) => {
     const repo = await getRepository();
@@ -354,9 +394,11 @@ export default function Play() {
     // 圈上下文随恢复装载（局中刷新：该 ongoing 局属于一圈中的某手）；与 session 同批更新。
     // 已收圈/废弃的旧圈不装载——恢复的是单局时结果面板不得混入旧圈总结算
     const active = await repo.getActiveMatch();
-    if (active && !active.finished) setMatch(active);
-    setSession({ gameId: id, state: deserializeSnapshot(last.json) });
-  }, [resumeCandidate, navigate]);
+    const state = deserializeSnapshot(last.json);
+    const resumedDifficulty = active?.difficulty ?? (isDifficulty(state.difficulty) ? state.difficulty : defaultDifficulty);
+    if (active && !active.finished) setMatch({ ...active, difficulty: resumedDifficulty });
+    setSession({ gameId: id, state: { ...state, difficulty: resumedDifficulty } });
+  }, [resumeCandidate, navigate, defaultDifficulty]);
 
   // 一圈推进：本局结束后把 delta 累计进圈并落库（按 gameId 幂等，重渲染不重复推进）
   useEffect(() => {
@@ -405,7 +447,7 @@ export default function Play() {
     const st = session.state;
     if (st.phase === 'dealing') return;
     if (st.phase === 'over') {
-      persistFinish(st);
+      if (!session.settled) persistFinish(st);
       // 打一圈自动模式：本局结束后稍候自动开下一手（圈推进 effect 先落盘，回调读最新 ref）；
       // 收圈则不续打，停在总结算面板
       if (autoMode && matchRef.current && !matchRef.current.finished) {
@@ -415,7 +457,6 @@ export default function Play() {
       return;
     }
     if (st.result) return;
-    const difficulty = settings?.difficulty ?? 'intermediate';
     const rs = getRuleset(st.rulesetId);
     const human = playerView(st, HUMAN_SEAT);
 
@@ -459,14 +500,14 @@ export default function Play() {
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [session, settings, resumeCandidate, persistFinish, step, autoMode, dialog]);
+  }, [session, difficulty, resumeCandidate, persistFinish, step, autoMode, dialog, startMatchHand]);
 
   // 人类出牌（含教练评估）
   const humanAct = (action: GameAction): void => {
     if (!session) return;
     const st = session.state;
     if (st.phase === 'action' && st.turn === HUMAN_SEAT && action.type === 'discard' && !autoMode) {
-      const ev = evaluateTurn(playerView(st, HUMAN_SEAT), action, settings?.difficulty ?? 'intermediate');
+      const ev = evaluateTurn(playerView(st, HUMAN_SEAT), action, difficulty);
       setHint(ev.hint?.text ?? null);
       if (ev.divergence) setDivergences((d) => [...d, { ...ev.divergence!, step: st.snapshotSeq }]);
     } else {
@@ -576,7 +617,7 @@ export default function Play() {
     }
     let state: ReturnType<typeof importGame>;
     try {
-      state = importGame(raw);
+      state = { ...importGame(raw), difficulty };
     } catch (e) {
       setImportError(e instanceof Error ? e.message : String(e));
       return;
@@ -633,7 +674,7 @@ export default function Play() {
           )}
           {match.hands.length > 0 && <MatchHands match={match} />}
           {match.finished ? (
-            <MatchSummary match={match} />
+            <MatchSummary match={match} difficulty={circleDifficulty} />
           ) : (
             match.hands.length > 0 && (
               <table className="score-table" data-testid="match-totals">
@@ -670,12 +711,13 @@ export default function Play() {
             <button data-testid="match-home" onClick={() => navigate('/')}>
               返回首页
             </button>
+            <button onClick={() => navigate('/play/new')}>新对局</button>
           </div>
         </div>
       </div>
     );
   }
-  if (!session || !view) return <div className="page">加载中…</div>;
+  if (!session || !view) return <div className="page">{error ?? '加载中…'}</div>;
 
   const result = session.state.result;
   const winAction = legal.find((a) => a.type === 'win');
@@ -929,7 +971,8 @@ export default function Play() {
                 </tbody>
               </table>
             )}
-            {match && match.finished && <MatchSummary match={match} />}
+            <CopyGameSeed key={session.gameId} kind="hand" seed={shareHandSeed(session.state, difficulty)} />
+            {match && match.finished && <MatchSummary match={match} difficulty={circleDifficulty} />}
             <div data-testid="divergence-list" className="divergence-list">
               <b>关键分歧点（{divergences.length}）</b>
               {divergences.length === 0 && <p className="muted">本局没有明显偏离 AI 建议的出牌。</p>}
@@ -962,6 +1005,7 @@ export default function Play() {
                 再来一局
               </button>
             )}
+            <button className="result-new-game" onClick={() => navigate('/play/new')}>新对局</button>
           </div>
         </div>
       )}
